@@ -33,6 +33,47 @@ export const getMyClasses = async (req, res) => {
   }
 };
 
+export const updateClass = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, subject } = req.body;
+
+    const updatedClass = await ClassModel.findOneAndUpdate(
+      { _id: id, teacher: req.user._id, isActive: true },
+      { name, subject },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedClass) {
+      return res.status(404).json({ message: 'Class not found' });
+    }
+
+    res.json({ message: 'Class updated', class: updatedClass });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update class', error: err.message });
+  }
+};
+
+export const deleteClass = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deletedClass = await ClassModel.findOneAndUpdate(
+      { _id: id, teacher: req.user._id, isActive: true },
+      { isActive: false },
+      { new: true }
+    );
+
+    if (!deletedClass) {
+      return res.status(404).json({ message: 'Class not found' });
+    }
+
+    res.json({ message: 'Class deleted' });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to delete class', error: err.message });
+  }
+};
+
 // Paginated so a class of 500+ students never loads in one giant payload
 export const getClassStudents = async (req, res) => {
   try {

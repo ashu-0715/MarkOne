@@ -8,6 +8,8 @@ const TeacherDashboard = () => {
   const [selectedClassId, setSelectedClassId] = useState('');
   const [showNewClass, setShowNewClass] = useState(false);
   const [newClass, setNewClass] = useState({ name: '', subject: '', className: '', section: '' });
+  const [editingClass, setEditingClass] = useState(null);
+  const [editClassForm, setEditClassForm] = useState({ name: '', subject: '' });
   const [copiedClassId, setCopiedClassId] = useState('');
   const [error, setError] = useState('');
 
@@ -22,6 +24,8 @@ const TeacherDashboard = () => {
       setTests(testsRes.data.tests);
       if (!selectedClassId && loadedClasses.length) {
         setSelectedClassId(loadedClasses[0]._id);
+      } else if (selectedClassId && !loadedClasses.some((item) => item._id === selectedClassId)) {
+        setSelectedClassId(loadedClasses[0]?._id || '');
       }
     } catch (err) {
       setError('Could not load dashboard data');
@@ -52,6 +56,41 @@ const TeacherDashboard = () => {
       setTimeout(() => setCopiedClassId(''), 1500);
     } catch (err) {
       setError('Could not copy class code');
+    }
+  };
+
+  const openEditClass = (classItem) => {
+    setEditingClass(classItem);
+    setEditClassForm({ name: classItem.name, subject: classItem.subject });
+    setError('');
+  };
+
+  const handleUpdateClass = async (e) => {
+    e.preventDefault();
+    if (!editingClass) return;
+
+    try {
+      await api.patch(`/classes/${editingClass._id}`, editClassForm);
+      setEditingClass(null);
+      setEditClassForm({ name: '', subject: '' });
+      loadData();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update class');
+    }
+  };
+
+  const handleDeleteClass = async (classItem) => {
+    const confirmed = window.confirm(`Delete "${classItem.name}"? Students will no longer be able to join with this class code.`);
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/classes/${classItem._id}`);
+      if (selectedClassId === classItem._id) {
+        setSelectedClassId('');
+      }
+      loadData();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to delete class');
     }
   };
 
@@ -97,7 +136,7 @@ const TeacherDashboard = () => {
               {classes.map((c) => (
                 <div
                   key={c._id}
-                  className={`flex items-stretch gap-2 rounded-xl border p-2 transition ${
+                  className={`flex flex-col gap-3 rounded-xl border p-3 transition sm:flex-row sm:items-stretch ${
                     selectedClassId === c._id
                       ? 'bg-accent/10 border-accent/50'
                       : 'bg-surface border-white/5 hover:border-white/15'
@@ -106,7 +145,7 @@ const TeacherDashboard = () => {
                   <button
                     type="button"
                     onClick={() => setSelectedClassId(c._id)}
-                    className="min-w-0 flex-1 px-2 py-1 text-left"
+                    className="min-w-0 flex-1 text-left"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -116,14 +155,30 @@ const TeacherDashboard = () => {
                       <span className="font-mono text-accent text-xs">{c.classCode}</span>
                     </div>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => copyClassCode(c.classCode, c._id)}
-                    className="rounded-lg bg-card px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10"
-                    aria-label={`Copy class code ${c.classCode}`}
-                  >
-                    {copiedClassId === c._id ? 'Copied' : 'Copy'}
-                  </button>
+                  <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center">
+                    <button
+                      type="button"
+                      onClick={() => copyClassCode(c.classCode, c._id)}
+                      className="rounded-lg bg-card px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10"
+                      aria-label={`Copy class code ${c.classCode}`}
+                    >
+                      {copiedClassId === c._id ? 'Copied' : 'Copy'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEditClass(c)}
+                      className="rounded-lg bg-card px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteClass(c)}
+                      className="rounded-lg bg-danger/15 px-3 py-2 text-xs font-semibold text-danger transition hover:bg-danger/25"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -145,6 +200,39 @@ const TeacherDashboard = () => {
               <div className="flex flex-col gap-3 pt-2 sm:flex-row">
                 <button type="button" className="btn-ghost flex-1" onClick={() => setShowNewClass(false)}>Cancel</button>
                 <button className="btn-accent flex-1">Create</button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {editingClass && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <form onSubmit={handleUpdateClass} className="card p-6 w-full max-w-sm space-y-3">
+              <h3 className="font-semibold text-lg mb-2">Edit Class</h3>
+              <input
+                required
+                placeholder="Class Name"
+                className="input-field"
+                value={editClassForm.name}
+                onChange={(e) => setEditClassForm({ ...editClassForm, name: e.target.value })}
+              />
+              <input
+                required
+                placeholder="Subject"
+                className="input-field"
+                value={editClassForm.subject}
+                onChange={(e) => setEditClassForm({ ...editClassForm, subject: e.target.value })}
+              />
+              <p className="text-muted text-xs">Class code stays the same so existing students do not lose access.</p>
+              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+                <button
+                  type="button"
+                  className="btn-ghost flex-1"
+                  onClick={() => setEditingClass(null)}
+                >
+                  Cancel
+                </button>
+                <button className="btn-accent flex-1">Save</button>
               </div>
             </form>
           </div>
