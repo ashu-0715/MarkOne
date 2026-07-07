@@ -137,16 +137,24 @@ const CreateTest = () => {
   };
 
   return (
-    <div className="flex">
+    <div className="teacher-layout">
       <Sidebar />
 
-      <main className="flex-1 p-8 max-w-5xl">
-        <h1 className="font-display font-bold text-2xl mb-6">
-          Create Test
-        </h1>
+      <main className="teacher-main max-w-5xl">
+        <div className="mb-6">
+          <h1 className="font-display font-bold text-2xl">
+            Create Test
+          </h1>
+          <p className="text-muted text-sm mt-1">Build and publish a test for your selected class.</p>
+        </div>
 
         {error && <p className="text-danger text-sm mb-4">{error}</p>}
-        {message && <p className="text-success text-sm mb-4">{message}</p>}
+        {message && (
+          <div className="publish-toast" role="status" aria-live="polite">
+            <p className="font-semibold">{message}</p>
+            <p className="text-xs text-white/75">Students can see it now.</p>
+          </div>
+        )}
 
         <div className="card p-6 mb-6 grid md:grid-cols-2 gap-4">
           <input
@@ -364,7 +372,7 @@ const CreateTest = () => {
           </div>
         </div>
 
-        <div className="flex gap-3 mt-6">
+        <div className="create-test-actions flex gap-3 mt-6">
           <button
             className="btn-ghost"
             onClick={() => submit('draft')}

@@ -27,11 +27,11 @@ const LandingPage = () => {
 
   return (
     <div className="min-h-screen">
-      <nav className="flex items-center justify-between px-8 py-5 max-w-7xl mx-auto">
-        <span className="font-display font-bold text-xl">
+      <nav className="landing-nav flex items-center justify-between gap-4 px-8 py-5 max-w-7xl mx-auto">
+        <span className="landing-brand font-display font-bold text-xl">
           Mark<span className="text-accent">One</span>
         </span>
-        <div className="flex items-center gap-3">
+        <div className="landing-nav-actions flex items-center gap-3">
           <Link to="/student/join" className="btn-ghost text-sm">Student Login</Link>
           <Link to="/teacher/login" className="btn-ghost text-sm">Teacher Login</Link>
           <button type="button" onClick={() => setShowLoginChoice(true)} className="btn-accent text-sm">Get Started</button>

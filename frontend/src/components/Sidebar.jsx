@@ -5,8 +5,6 @@ const links = [
   { to: '/teacher/dashboard', label: 'Dashboard' },
   { to: '/teacher/question-bank', label: 'Question Bank' },
   { to: '/teacher/create-test', label: 'Create Test' },
-  { to: '/teacher/dashboard', label: 'My Classes' },
-  { to: '/teacher/dashboard', label: 'Reports' },
 ];
 
 const Sidebar = () => {
@@ -16,7 +14,7 @@ const Sidebar = () => {
     <aside className="teacher-sidebar">
       <div className="teacher-sidebar-header px-6 py-6">
         <span className="font-display font-bold text-xl">
-          Edu<span className="text-accent">AI</span>
+          Mark<span className="text-accent">One</span>
         </span>
         <p className="text-xs text-muted mt-1 truncate">{user?.fullName}</p>
       </div>

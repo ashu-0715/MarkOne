@@ -143,7 +143,7 @@ const TeacherDashboard = () => {
 
         {error && <p className="text-danger text-sm mb-4">{error}</p>}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 mb-6 md:mb-10">
+        <div className="dashboard-stats grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 mb-6 md:mb-10">
           {cards.map((c) => (
             <div key={c.label} className="card p-4 md:p-5">
               <p className="text-muted text-xs uppercase tracking-wide">{c.label}</p>
