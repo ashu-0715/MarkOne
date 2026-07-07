@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const links = [
+  { to: '/', label: 'Home' },
   { to: '/teacher/dashboard', label: 'Dashboard' },
   { to: '/teacher/question-bank', label: 'Question Bank' },
   { to: '/teacher/create-test', label: 'Create Test' },
