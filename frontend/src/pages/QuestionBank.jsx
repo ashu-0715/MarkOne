@@ -9,7 +9,7 @@ const emptyQuestion = {
 
 const QuestionBank = () => {
   const [questions, setQuestions] = useState([]);
-  const [filters, setFilters] = useState({ subject: '', chapter: '', difficulty: '', type: '', search: '' });
+  const [filters, setFilters] = useState({ subject: '', chapter: '', type: '', search: '' });
   const [selected, setSelected] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(emptyQuestion);
@@ -97,18 +97,11 @@ const QuestionBank = () => {
 
         {error && <p className="text-danger text-sm mb-4">{error}</p>}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <input placeholder="Subject" className="input-field" value={filters.subject}
             onChange={(e) => setFilters({ ...filters, subject: e.target.value })} />
           <input placeholder="Chapter" className="input-field" value={filters.chapter}
             onChange={(e) => setFilters({ ...filters, chapter: e.target.value })} />
-          <select className="input-field" value={filters.difficulty}
-            onChange={(e) => setFilters({ ...filters, difficulty: e.target.value })}>
-            <option value="">Any Difficulty</option>
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
           <select className="input-field" value={filters.type}
             onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
             <option value="">Any Type</option>
@@ -136,7 +129,6 @@ const QuestionBank = () => {
                 <div className="flex gap-2 text-xs text-muted mb-1">
                   <span className="bg-surface px-2 py-0.5 rounded">{q.subject}</span>
                   <span className="bg-surface px-2 py-0.5 rounded">{q.chapter}</span>
-                  <span className="bg-surface px-2 py-0.5 rounded capitalize">{q.difficulty}</span>
                   <span className="bg-surface px-2 py-0.5 rounded">{q.marks} mark(s)</span>
                 </div>
                 <p className="text-sm">{q.questionText}</p>
@@ -158,17 +150,12 @@ const QuestionBank = () => {
                 <input required placeholder="Chapter" className="input-field" value={form.chapter}
                   onChange={(e) => setForm({ ...form, chapter: e.target.value })} />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <select className="input-field" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
                   <option value="mcq">MCQ</option>
                   <option value="true_false">True/False</option>
                   <option value="fill_blank">Fill in the Blank</option>
                   <option value="assertion_reason">Assertion & Reason</option>
-                </select>
-                <select className="input-field" value={form.difficulty} onChange={(e) => setForm({ ...form, difficulty: e.target.value })}>
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
                 </select>
                 <input type="number" min="1" className="input-field" value={form.marks}
                   onChange={(e) => setForm({ ...form, marks: Number(e.target.value) })} />

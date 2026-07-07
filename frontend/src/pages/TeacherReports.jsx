@@ -59,7 +59,7 @@ const TeacherReports = () => {
     { label: 'Class Average', value: `${report.summary.classAverage}%` },
     { label: 'Attempts', value: report.summary.totalAttempts },
     { label: 'Attempted Students', value: `${report.summary.attemptedStudents}/${report.summary.totalStudents}` },
-    { label: 'Tests In Class', value: report.summary.totalTests },
+    { label: 'Joined Students', value: report.summary.joinedStudents ?? report.students.length },
   ] : [];
 
   const getMarksSummary = (studentReport) => {
@@ -121,16 +121,16 @@ const TeacherReports = () => {
 
         {error && <p className="text-danger text-sm mb-4">{error}</p>}
 
-        <section className="card p-4 md:p-6">
+        <section className="card p-4 md:p-5">
           {loadingReport ? (
             <p className="text-muted text-sm">Loading report...</p>
           ) : report ? (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+              <div className="report-summary-grid grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3 mb-5">
                 {reportCards.map((card) => (
-                  <div key={card.label} className="bg-surface rounded-xl p-3 md:p-4 border border-white/5">
-                    <p className="text-muted text-xs uppercase tracking-wide">{card.label}</p>
-                    <p className="font-display font-bold text-xl md:text-2xl mt-2">{card.value}</p>
+                  <div key={card.label} className="bg-surface rounded-lg p-3 border border-white/5">
+                    <p className="text-muted text-[0.65rem] uppercase tracking-wide">{card.label}</p>
+                    <p className="font-display font-bold text-lg md:text-xl mt-1">{card.value}</p>
                   </div>
                 ))}
               </div>

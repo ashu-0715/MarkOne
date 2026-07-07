@@ -189,7 +189,7 @@ const TeacherDashboard = () => {
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
             <form onSubmit={handleCreateClass} className="card p-6 w-full max-w-sm space-y-3">
               <h3 className="font-semibold text-lg mb-2">Create Class</h3>
-              <input required placeholder="Class Name (e.g. Physics XII A)" className="input-field"
+              <input required placeholder="Batch Name (e.g. XII A Physics)" className="input-field"
                 value={newClass.name} onChange={(e) => setNewClass({ ...newClass, name: e.target.value })} />
               <input required placeholder="Subject" className="input-field"
                 value={newClass.subject} onChange={(e) => setNewClass({ ...newClass, subject: e.target.value })} />

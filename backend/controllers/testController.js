@@ -32,6 +32,7 @@ export const createTest = async (req, res) => {
     if (payload.availableFrom && payload.availableUntil && payload.availableFrom >= payload.availableUntil) {
       return res.status(400).json({ message: 'Schedule end must be after schedule start' });
     }
+    payload.totalStudents = Math.max(Number(payload.totalStudents) || 0, 0);
     const questions = await Question.find({ _id: { $in: payload.questions }, teacher: req.user._id });
     payload.totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
 

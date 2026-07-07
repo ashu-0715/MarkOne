@@ -81,7 +81,7 @@ const buildClassAnalysis = async (classId, teacherId) => {
     Student.find({ class: classId, teacher: teacherId, isActive: true })
       .select('name rollNumber className section')
       .sort({ rollNumber: 1, name: 1 }),
-    Test.find({ class: classId, teacher: teacherId }).select('_id title subject totalMarks').sort({ createdAt: -1 }),
+    Test.find({ class: classId, teacher: teacherId }).select('_id title subject totalMarks totalStudents').sort({ createdAt: -1 }),
   ]);
 
   const testIds = tests.map((test) => test._id);
@@ -128,6 +128,11 @@ const buildClassAnalysis = async (classId, teacherId) => {
   });
 
   const attemptedStudents = studentsReport.filter((student) => student.attemptedTests > 0);
+  const configuredTotalStudents = tests.reduce(
+    (max, test) => Math.max(max, Number(test.totalStudents) || 0),
+    0
+  );
+  const expectedStudents = configuredTotalStudents || students.length;
   const classAverage = attemptedStudents.length
     ? round(attemptedStudents.reduce((sum, student) => sum + student.averagePercentage, 0) / attemptedStudents.length)
     : 0;
@@ -135,7 +140,8 @@ const buildClassAnalysis = async (classId, teacherId) => {
   return {
     class: classInfo,
     summary: {
-      totalStudents: students.length,
+      totalStudents: expectedStudents,
+      joinedStudents: students.length,
       totalTests: tests.length,
       totalAttempts: attempts.length,
       attemptedStudents: attemptedStudents.length,

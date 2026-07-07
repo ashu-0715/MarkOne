@@ -10,6 +10,7 @@ const CreateTest = () => {
     title: '',
     subject: '',
     class: '',
+    totalStudents: '',
     chapter: '',
     timeLimitMinutes: '', // Changed from 30 to ''
     scheduleEnabled: false,
@@ -61,6 +62,10 @@ const CreateTest = () => {
       return setError('Please select a test duration');
     }
 
+    if (!config.totalStudents || Number(config.totalStudents) < 1) {
+      return setError('Enter the total number of students for this test');
+    }
+
     let availableFrom = '';
     let availableUntil = '';
     if (config.scheduleEnabled) {
@@ -86,6 +91,7 @@ const CreateTest = () => {
         title: config.title,
         subject: config.subject,
         class: config.class,
+        totalStudents: Number(config.totalStudents) || undefined,
         chapter: config.chapter,
         questions: selectedQuestions,
         timeLimitMinutes: Number(config.timeLimitMinutes),
@@ -116,6 +122,7 @@ const CreateTest = () => {
         title: '',
         subject: '',
         class: '',
+        totalStudents: '',
         chapter: '',
         timeLimitMinutes: '',
         scheduleEnabled: false,

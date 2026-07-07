@@ -19,6 +19,7 @@ const testSchema = new mongoose.Schema(
     allowRetest: { type: Boolean, default: false },
     status: { type: String, enum: ['draft', 'published'], default: 'draft', index: true },
     totalMarks: { type: Number, default: 0 },
+    totalStudents: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
