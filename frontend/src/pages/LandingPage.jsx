@@ -29,7 +29,7 @@ const LandingPage = () => {
     <div className="min-h-screen">
       <nav className="landing-nav flex items-center justify-between gap-4 px-8 py-5 max-w-7xl mx-auto">
         <span className="landing-brand font-display font-bold text-xl">
-          Mark<span className="text-accent">One</span>
+          1<span className="text-accent">மதிப்பெண்</span>
         </span>
         <div className="landing-nav-actions flex items-center gap-3">
           <Link to="/student/join" className="btn-ghost text-sm">Student Login</Link>
