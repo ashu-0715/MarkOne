@@ -82,6 +82,17 @@ svg {
   flex-direction: column;
 }
 
+.teacher-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.teacher-menu-button {
+  display: none;
+}
+
 .teacher-nav-link {
   display: block;
   padding: 0.625rem 1rem;
@@ -122,7 +133,8 @@ svg {
   .teacher-layout {
     display: block;
     min-height: 100vh;
-    padding-bottom: calc(4.85rem + env(safe-area-inset-bottom));
+    padding-top: calc(4.75rem + env(safe-area-inset-top));
+    padding-bottom: 0;
   }
 
   .teacher-main {
@@ -132,42 +144,74 @@ svg {
 
   .teacher-sidebar {
     position: fixed;
-    inset: auto 0 0 0;
-    z-index: 60;
+    inset: 0 0 auto 0;
+    z-index: 70;
     width: 100%;
     height: auto;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 0;
     border-right: 0;
-    padding: 0.45rem 0.75rem calc(0.45rem + env(safe-area-inset-bottom));
+    padding: calc(0.65rem + env(safe-area-inset-top)) 0.85rem 0.65rem;
   }
 
-  .teacher-sidebar-header,
-  .teacher-sidebar-footer {
-    display: none;
+  .teacher-sidebar-header {
+    padding: 0;
   }
 
   .teacher-sidebar nav {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.45rem;
-    padding: 0;
-    scrollbar-width: none;
+    display: none;
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #101010;
   }
 
-  .teacher-sidebar nav::-webkit-scrollbar {
+  .teacher-sidebar-open nav {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .teacher-sidebar-footer {
     display: none;
+    padding: 0.75rem 0.75rem 0;
+  }
+
+  .teacher-sidebar-open .teacher-sidebar-footer {
+    display: block;
+  }
+
+  .teacher-menu-button {
+    width: 2.75rem;
+    height: 2.75rem;
+    flex: 0 0 auto;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.28rem;
+    border-radius: 0.9rem;
+    background: #242424;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .teacher-menu-button span {
+    width: 1.1rem;
+    height: 0.12rem;
+    border-radius: 999px;
+    background: #fff;
   }
 
   .teacher-nav-link {
     min-width: 0;
-    min-height: 3rem;
-    padding: 0.55rem 0.3rem;
+    min-height: 2.9rem;
+    padding: 0.75rem 0.9rem;
     display: flex;
     align-items: center;
-    justify-content: center;
-    text-align: center;
-    font-size: 0.72rem;
-    line-height: 1.1;
+    justify-content: flex-start;
+    text-align: left;
+    font-size: 0.9rem;
+    line-height: 1.2;
     border-radius: 0.9rem;
   }
 
@@ -181,10 +225,10 @@ svg {
 
   .create-test-actions {
     position: sticky;
-    bottom: calc(4.85rem + env(safe-area-inset-bottom));
+    bottom: 0;
     z-index: 45;
     margin-inline: -0.25rem;
-    padding: 0.75rem 0.25rem 0;
+    padding: 0.75rem 0.25rem calc(0.75rem + env(safe-area-inset-bottom));
     background: linear-gradient(to top, #0D0D0D 78%, rgba(13, 13, 13, 0));
   }
 

@@ -5,6 +5,7 @@ import StudentJoin from './pages/StudentJoin.jsx';
 import TeacherDashboard from './pages/TeacherDashboard.jsx';
 import QuestionBank from './pages/QuestionBank.jsx';
 import CreateTest from './pages/CreateTest.jsx';
+import TeacherReports from './pages/TeacherReports.jsx';
 import StudentDashboard from './pages/StudentDashboard.jsx';
 import TestInterface from './pages/TestInterface.jsx';
 import ResultPage from './pages/ResultPage.jsx';
@@ -21,6 +22,7 @@ function App() {
       <Route path="/teacher/dashboard" element={<ProtectedRoute allowedRole="teacher"><TeacherDashboard /></ProtectedRoute>} />
       <Route path="/teacher/question-bank" element={<ProtectedRoute allowedRole="teacher"><QuestionBank /></ProtectedRoute>} />
       <Route path="/teacher/create-test" element={<ProtectedRoute allowedRole="teacher"><CreateTest /></ProtectedRoute>} />
+      <Route path="/teacher/reports" element={<ProtectedRoute allowedRole="teacher"><TeacherReports /></ProtectedRoute>} />
 
       <Route path="/student/dashboard" element={<ProtectedRoute allowedRole="student"><StudentDashboard /></ProtectedRoute>} />
       <Route path="/student/test/:id" element={<ProtectedRoute allowedRole="student"><TestInterface /></ProtectedRoute>} />
