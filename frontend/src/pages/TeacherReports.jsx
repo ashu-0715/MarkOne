@@ -5,6 +5,7 @@ import api from '../api/axios.js';
 const TeacherReports = () => {
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState('');
+  const [selectedTestId, setSelectedTestId] = useState('');
   const [report, setReport] = useState(null);
   const [expandedStudentId, setExpandedStudentId] = useState('');
   const [loadingReport, setLoadingReport] = useState(false);
@@ -37,7 +38,9 @@ const TeacherReports = () => {
       try {
         setLoadingReport(true);
         setError('');
-        const res = await api.get(`/reports/class/${selectedClassId}`);
+        const res = await api.get(`/reports/class/${selectedClassId}`, {
+          params: selectedTestId ? { testId: selectedTestId } : {},
+        });
         setReport(res.data.analysis);
         setExpandedStudentId('');
       } catch (err) {
@@ -48,7 +51,7 @@ const TeacherReports = () => {
     };
 
     loadReport();
-  }, [selectedClassId]);
+  }, [selectedClassId, selectedTestId]);
 
   const selectedClass = useMemo(
     () => classes.find((item) => item._id === selectedClassId),
@@ -73,10 +76,16 @@ const TeacherReports = () => {
     try {
       setDownloadingPdf(true);
       setError('');
-      const res = await api.get(`/reports/class/${selectedClassId}/export/pdf`, { responseType: 'blob' });
+      const res = await api.get(`/reports/class/${selectedClassId}/export/pdf`, {
+        params: selectedTestId ? { testId: selectedTestId } : {},
+        responseType: 'blob',
+      });
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
-      const filename = `${selectedClass?.name || 'class'}-report.pdf`.replace(/[^a-z0-9.-]/gi, '-').toLowerCase();
+      const selectedTest = report?.availableTests?.find((test) => test.testId === selectedTestId);
+      const filename = `${selectedClass?.name || 'class'}${selectedTest ? `-${selectedTest.title}` : ''}-report.pdf`
+        .replace(/[^a-z0-9.-]/gi, '-')
+        .toLowerCase();
       link.href = url;
       link.setAttribute('download', filename);
       document.body.appendChild(link);
@@ -103,10 +112,24 @@ const TeacherReports = () => {
             <select
               className="input-field sm:w-64"
               value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
+              onChange={(e) => {
+                setSelectedClassId(e.target.value);
+                setSelectedTestId('');
+              }}
               disabled={!classes.length}
             >
               {classes.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+            </select>
+            <select
+              className="input-field sm:w-64"
+              value={selectedTestId}
+              onChange={(e) => setSelectedTestId(e.target.value)}
+              disabled={!report?.availableTests?.length}
+            >
+              <option value="">Select your class title</option>
+              {report?.availableTests?.map((test) => (
+                <option key={test.testId} value={test.testId}>{test.title}</option>
+              ))}
             </select>
             <button
               type="button"

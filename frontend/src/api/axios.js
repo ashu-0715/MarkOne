@@ -6,14 +6,17 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('eduai_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  const isAuthRequest = config.url?.includes('/auth/');
+  if (token && !isAuthRequest) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    const token = localStorage.getItem('eduai_token');
+    const isAuthRequest = err.config?.url?.includes('/auth/');
+    if (err.response?.status === 401 && token && !isAuthRequest) {
       localStorage.removeItem('eduai_token');
       localStorage.removeItem('eduai_role');
       window.location.href = '/';
