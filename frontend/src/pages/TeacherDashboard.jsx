@@ -8,6 +8,7 @@ const TeacherDashboard = () => {
   const [selectedClassId, setSelectedClassId] = useState('');
   const [showNewClass, setShowNewClass] = useState(false);
   const [newClass, setNewClass] = useState({ name: '', subject: '', classCode: '' });
+  const [viewingClass, setViewingClass] = useState(null);
   const [editingClass, setEditingClass] = useState(null);
   const [editClassForm, setEditClassForm] = useState({ name: '', subject: '', classCode: '' });
   const [copiedClassId, setCopiedClassId] = useState('');
@@ -36,6 +37,10 @@ const TeacherDashboard = () => {
 
   const totalStudents = classes.reduce((sum, c) => sum + (c.studentCount || 0), 0);
   const activeTests = tests.filter((t) => t.status === 'published').length;
+  const viewingClassTests = viewingClass
+    ? tests.filter((test) => String(test.class) === viewingClass._id)
+    : [];
+  const viewingQuestionCount = viewingClassTests.reduce((sum, test) => sum + (test.questions?.length || 0), 0);
 
   const handleCreateClass = async (e) => {
     e.preventDefault();
@@ -155,7 +160,14 @@ const TeacherDashboard = () => {
                       <span className="font-mono text-accent text-xs">{c.classCode}</span>
                     </div>
                   </button>
-                  <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center">
+                  <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                    <button
+                      type="button"
+                      onClick={() => setViewingClass(c)}
+                      className="rounded-lg bg-accent/15 px-3 py-2 text-xs font-semibold text-accent transition hover:bg-accent/25"
+                    >
+                      View My Class
+                    </button>
                     <button
                       type="button"
                       onClick={() => copyClassCode(c.classCode, c._id)}
@@ -240,6 +252,70 @@ const TeacherDashboard = () => {
                 <button className="btn-accent flex-1">Save</button>
               </div>
             </form>
+          </div>
+        )}
+
+        {viewingClass && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="card p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5">
+                <div>
+                  <h3 className="font-semibold text-lg">{viewingClass.name}</h3>
+                  <p className="text-muted text-xs mt-1">
+                    {viewingClass.subject} | {viewingClass.classCode} | {viewingQuestionCount} selected question(s)
+                  </p>
+                </div>
+                <button className="btn-ghost px-3 py-1.5 text-sm" onClick={() => setViewingClass(null)}>
+                  Close
+                </button>
+              </div>
+
+              {viewingClassTests.length === 0 ? (
+                <p className="text-muted text-sm">No tests have been created for this class yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  {viewingClassTests.map((test) => (
+                    <div key={test._id} className="rounded-xl bg-surface border border-white/5 p-4">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between mb-3">
+                        <div>
+                          <p className="font-medium">{test.title}</p>
+                          <p className="text-muted text-xs">
+                            {test.status} | {test.questions?.length || 0} question(s) | {test.totalMarks} mark(s)
+                          </p>
+                        </div>
+                      </div>
+
+                      {test.questions?.length > 0 ? (
+                        <div className="space-y-3">
+                          {test.questions.map((question, index) => (
+                            <div key={question._id || `${test._id}-${index}`} className="border-t border-white/5 pt-3">
+                              <p className="text-xs text-muted mb-1">
+                                Question {index + 1} | {question.chapter} | {question.marks} mark(s)
+                              </p>
+                              <p className="text-sm whitespace-pre-wrap">{question.questionText}</p>
+                              {question.imageUrl && (
+                                <img src={question.imageUrl} alt="question diagram" className="mt-3 rounded-lg max-h-72 object-contain" />
+                              )}
+                              {question.options?.length > 0 && (
+                                <div className="mt-3 space-y-2">
+                                  {question.options.map((option, optionIndex) => (
+                                    <p key={`${question._id}-${optionIndex}`} className="rounded-lg bg-card p-2 text-xs">
+                                      {String.fromCharCode(65 + optionIndex)}. {option}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-muted text-sm">No questions were selected for this test.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </main>

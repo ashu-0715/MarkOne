@@ -2,31 +2,80 @@ import { useEffect, useMemo, useState } from 'react';
 import Sidebar from '../components/Sidebar.jsx';
 import api from '../api/axios.js';
 
+const emptyConfig = {
+  title: '',
+  subject: '',
+  class: '',
+  totalStudents: '',
+  chapter: '',
+  timeLimitMinutes: '',
+  scheduleEnabled: false,
+  scheduleStartDate: '',
+  scheduleStartTime: '',
+  scheduleEndDate: '',
+  scheduleEndTime: '',
+  negativeMarkingEnabled: false,
+  negativeMarkingValue: 0.25,
+  shuffleQuestions: true,
+  shuffleOptions: true,
+  autoSubmit: true,
+  showAnswersAfterSubmission: true,
+  allowRetest: false,
+};
+
+const QuestionPreview = ({ question, onClose }) => {
+  if (!question) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="card p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-lg">Full Question</h3>
+            <p className="text-xs text-muted mt-1">
+              {question.subject} | {question.chapter} | {question.type} | {question.marks} mark(s)
+            </p>
+          </div>
+          <button className="btn-ghost px-3 py-1.5 text-sm" onClick={onClose}>
+            Close
+          </button>
+        </div>
+
+        <p className="whitespace-pre-wrap text-sm leading-relaxed">{question.questionText}</p>
+
+        {question.imageUrl && (
+          <img src={question.imageUrl} alt="question diagram" className="rounded-lg max-h-80 object-contain" />
+        )}
+
+        {question.options?.length > 0 && (
+          <div className="space-y-2">
+            {question.options.map((option, index) => (
+              <p key={`${question._id}-${index}`} className="rounded-lg bg-surface p-3 text-sm">
+                {String.fromCharCode(65 + index)}. {option}
+              </p>
+            ))}
+          </div>
+        )}
+
+        <p className="text-sm">
+          <span className="text-muted">Correct answer:</span> {question.correctAnswer}
+        </p>
+        {question.explanation && (
+          <p className="text-sm whitespace-pre-wrap">
+            <span className="text-muted">Explanation:</span> {question.explanation}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const CreateTest = () => {
   const [classes, setClasses] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [selectedQuestions, setSelectedQuestions] = useState([]);
-  const [config, setConfig] = useState({
-    title: '',
-    subject: '',
-    class: '',
-    totalStudents: '',
-    chapter: '',
-    timeLimitMinutes: '', // Changed from 30 to ''
-    scheduleEnabled: false,
-    scheduleStartDate: '',
-    scheduleStartTime: '',
-    scheduleEndDate: '',
-    scheduleEndTime: '',
-    negativeMarkingEnabled: false,
-    negativeMarkingValue: 0.25,
-    shuffleQuestions: true,
-    shuffleOptions: true,
-    autoSubmit: true,
-    showAnswersAfterSubmission: true,
-    allowRetest: false,
-  });
-
+  const [activeQuestion, setActiveQuestion] = useState(null);
+  const [config, setConfig] = useState(emptyConfig);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -35,15 +84,23 @@ const CreateTest = () => {
     [classes, config.class]
   );
 
+  const allQuestionIds = questions.map((q) => q._id);
+  const allQuestionsSelected = questions.length > 0 && selectedQuestions.length === questions.length;
+
   useEffect(() => {
     api.get('/classes').then((res) => setClasses(res.data.classes));
     api.get('/questions', { params: { limit: 100 } }).then((res) => setQuestions(res.data.questions));
   }, []);
 
-  const toggleQuestion = (id) =>
+  const toggleQuestion = (id) => {
     setSelectedQuestions((s) =>
       s.includes(id) ? s.filter((x) => x !== id) : [...s, id]
     );
+  };
+
+  const toggleAllQuestions = () => {
+    setSelectedQuestions(allQuestionsSelected ? [] : allQuestionIds);
+  };
 
   const buildScheduleDateTime = (date, time) => {
     if (!date || !time) return '';
@@ -116,28 +173,7 @@ const CreateTest = () => {
       }
 
       setSelectedQuestions([]);
-
-      // Reset form
-      setConfig({
-        title: '',
-        subject: '',
-        class: '',
-        totalStudents: '',
-        chapter: '',
-        timeLimitMinutes: '',
-        scheduleEnabled: false,
-        scheduleStartDate: '',
-        scheduleStartTime: '',
-        scheduleEndDate: '',
-        scheduleEndTime: '',
-        negativeMarkingEnabled: false,
-        negativeMarkingValue: 0.25,
-        shuffleQuestions: true,
-        shuffleOptions: true,
-        autoSubmit: true,
-        showAnswersAfterSubmission: true,
-        allowRetest: false,
-      });
+      setConfig(emptyConfig);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save test');
     }
@@ -149,9 +185,7 @@ const CreateTest = () => {
 
       <main className="teacher-main max-w-5xl">
         <div className="mb-6">
-          <h1 className="font-display font-bold text-2xl">
-            Create Test
-          </h1>
+          <h1 className="font-display font-bold text-2xl">Create Test</h1>
           <p className="text-muted text-sm mt-1">Build and publish a test for your selected class.</p>
         </div>
 
@@ -168,26 +202,20 @@ const CreateTest = () => {
             placeholder="Test Title"
             className="input-field"
             value={config.title}
-            onChange={(e) =>
-              setConfig({ ...config, title: e.target.value })
-            }
+            onChange={(e) => setConfig({ ...config, title: e.target.value })}
           />
 
           <input
             placeholder="Subject"
             className="input-field"
             value={config.subject}
-            onChange={(e) =>
-              setConfig({ ...config, subject: e.target.value })
-            }
+            onChange={(e) => setConfig({ ...config, subject: e.target.value })}
           />
 
           <select
             className="input-field"
             value={config.class}
-            onChange={(e) =>
-              setConfig({ ...config, class: e.target.value })
-            }
+            onChange={(e) => setConfig({ ...config, class: e.target.value })}
           >
             <option value="">Select Class</option>
             {classes.map((c) => (
@@ -198,48 +226,30 @@ const CreateTest = () => {
           </select>
 
           <div className="rounded-xl bg-surface border border-white/10 px-4 py-2.5">
-  <p className="text-muted text-xs uppercase tracking-wide">
-    Total Students
-  </p>
-
-  <input
-    type="number"
-    min="1"
-    placeholder="Enter total students"
-    value={config.totalStudents || ""}
-    onChange={(e) =>
-      setConfig({
-        ...config,
-        totalStudents: e.target.value,
-      })
-    }
-    className="mt-2 w-full rounded-lg bg-black border border-white/10 px-3 py-2 text-white focus:border-primary outline-none"
-  />
-</div>
+            <p className="text-muted text-xs uppercase tracking-wide">Total Students</p>
+            <input
+              type="number"
+              min="1"
+              placeholder="Enter total students"
+              value={config.totalStudents || ''}
+              onChange={(e) => setConfig({ ...config, totalStudents: e.target.value })}
+              className="mt-2 w-full rounded-lg bg-black border border-white/10 px-3 py-2 text-white focus:border-primary outline-none"
+            />
+          </div>
 
           <input
             placeholder="Chapter (optional)"
             className="input-field"
             value={config.chapter}
-            onChange={(e) =>
-              setConfig({ ...config, chapter: e.target.value })
-            }
+            onChange={(e) => setConfig({ ...config, chapter: e.target.value })}
           />
 
-          {/* Duration Dropdown */}
           <select
             className="input-field"
             value={config.timeLimitMinutes}
-            onChange={(e) =>
-              setConfig({
-                ...config,
-                timeLimitMinutes: e.target.value,
-              })
-            }
+            onChange={(e) => setConfig({ ...config, timeLimitMinutes: e.target.value })}
           >
-            <option value="" disabled>
-              Duration
-            </option>
+            <option value="" disabled>Duration</option>
             <option value="5">5 Minutes</option>
             <option value="10">10 Minutes</option>
             <option value="15">15 Minutes</option>
@@ -324,19 +334,11 @@ const CreateTest = () => {
               ['showAnswersAfterSubmission', 'Show Answers After Submission'],
               ['allowRetest', 'Allow Retest'],
             ].map(([key, label]) => (
-              <label
-                key={key}
-                className="flex items-center gap-2 text-sm text-muted"
-              >
+              <label key={key} className="flex items-center gap-2 text-sm text-muted">
                 <input
                   type="checkbox"
                   checked={config[key]}
-                  onChange={(e) =>
-                    setConfig({
-                      ...config,
-                      [key]: e.target.checked,
-                    })
-                  }
+                  onChange={(e) => setConfig({ ...config, [key]: e.target.checked })}
                 />
                 {label}
               </label>
@@ -345,16 +347,27 @@ const CreateTest = () => {
         </div>
 
         <div className="card p-6">
-          <h2 className="font-semibold mb-4">
-            Select Questions ({selectedQuestions.length} selected)
-          </h2>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+            <div>
+              <h2 className="font-semibold">
+                Select Questions ({selectedQuestions.length} of {questions.length} selected)
+              </h2>
+              <p className="text-muted text-xs mt-1">Click a question to view it fully.</p>
+            </div>
+            <label className="inline-flex items-center gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={allQuestionsSelected}
+                disabled={questions.length === 0}
+                onChange={toggleAllQuestions}
+              />
+              Select All
+            </label>
+          </div>
 
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {questions.map((q) => (
-              <label
-                key={q._id}
-                className="flex items-start gap-3 bg-surface rounded-xl p-3 cursor-pointer"
-              >
+              <div key={q._id} className="flex items-start gap-3 bg-surface rounded-xl p-3">
                 <input
                   type="checkbox"
                   className="mt-1"
@@ -362,38 +375,32 @@ const CreateTest = () => {
                   onChange={() => toggleQuestion(q._id)}
                 />
 
-                <div>
+                <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setActiveQuestion(q)}>
                   <p className="text-sm">{q.questionText}</p>
                   <p className="text-xs text-muted">
-                    {q.subject} · {q.chapter} · {q.marks} mark(s)
+                    {q.subject} | {q.chapter} | {q.marks} mark(s)
                   </p>
-                </div>
-              </label>
+                </button>
+              </div>
             ))}
 
             {questions.length === 0 && (
-              <p className="text-muted text-sm">
-                No questions in your bank yet — add some first.
-              </p>
+              <p className="text-muted text-sm">No questions in your bank yet - add some first.</p>
             )}
           </div>
         </div>
 
         <div className="create-test-actions flex gap-3 mt-6">
-          <button
-            className="btn-ghost"
-            onClick={() => submit('draft')}
-          >
+          <button className="btn-ghost" onClick={() => submit('draft')}>
             Save Draft
           </button>
 
-          <button
-            className="btn-accent"
-            onClick={() => submit('published')}
-          >
+          <button className="btn-accent" onClick={() => submit('published')}>
             Publish
           </button>
         </div>
+
+        <QuestionPreview question={activeQuestion} onClose={() => setActiveQuestion(null)} />
       </main>
     </div>
   );
