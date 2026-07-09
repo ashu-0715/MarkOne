@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Sidebar from '../components/Sidebar.jsx';
 import api from '../api/axios.js';
 
 const TeacherDashboard = () => {
   const [classes, setClasses] = useState([]);
   const [tests, setTests] = useState([]);
+  const [questionBank, setQuestionBank] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [showNewClass, setShowNewClass] = useState(false);
   const [newClass, setNewClass] = useState({ name: '', subject: '', classCode: '' });
@@ -16,13 +17,15 @@ const TeacherDashboard = () => {
 
   const loadData = async () => {
     try {
-      const [classesRes, testsRes] = await Promise.all([
+      const [classesRes, testsRes, questionsRes] = await Promise.all([
         api.get('/classes'),
         api.get('/tests/mine'),
+        api.get('/questions', { params: { limit: 1000 } }),
       ]);
       const loadedClasses = classesRes.data.classes;
       setClasses(loadedClasses);
       setTests(testsRes.data.tests);
+      setQuestionBank(questionsRes.data.questions || []);
       if (!selectedClassId && loadedClasses.length) {
         setSelectedClassId(loadedClasses[0]._id);
       } else if (selectedClassId && !loadedClasses.some((item) => item._id === selectedClassId)) {
@@ -37,10 +40,21 @@ const TeacherDashboard = () => {
 
   const totalStudents = classes.reduce((sum, c) => sum + (c.studentCount || 0), 0);
   const activeTests = tests.filter((t) => t.status === 'published').length;
+  const questionBankById = useMemo(
+    () => new Map(questionBank.map((question) => [question._id, question])),
+    [questionBank]
+  );
+  const getId = (value) => String(value?._id || value || '');
+  const hydrateQuestion = (question) => {
+    if (!question) return null;
+    if (typeof question === 'string') return questionBankById.get(question) || { _id: question };
+    return question.questionText ? question : questionBankById.get(getId(question)) || question;
+  };
+  const getTestQuestions = (test) => (test.questions || []).map(hydrateQuestion).filter(Boolean);
   const viewingClassTests = viewingClass
-    ? tests.filter((test) => String(test.class) === viewingClass._id)
+    ? tests.filter((test) => getId(test.class) === viewingClass._id)
     : [];
-  const viewingQuestionCount = viewingClassTests.reduce((sum, test) => sum + (test.questions?.length || 0), 0);
+  const viewingQuestionCount = viewingClassTests.reduce((sum, test) => sum + getTestQuestions(test).length, 0);
 
   const handleCreateClass = async (e) => {
     e.preventDefault();
@@ -256,16 +270,16 @@ const TeacherDashboard = () => {
         )}
 
         {viewingClass && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="card p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5">
+          <div className="fixed inset-0 bg-black/70 flex items-stretch justify-center z-50 p-0 sm:items-center sm:p-4">
+            <div className="card w-full h-full max-h-none overflow-y-auto rounded-none p-4 sm:h-auto sm:max-w-3xl sm:max-h-[85vh] sm:rounded-xl2 sm:p-6">
+              <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 border-b border-white/5 bg-card/95 px-4 py-4 sm:static sm:m-0 sm:mb-5 sm:border-0 sm:bg-transparent sm:p-0">
                 <div>
                   <h3 className="font-semibold text-lg">{viewingClass.name}</h3>
                   <p className="text-muted text-xs mt-1">
                     {viewingClass.subject} | {viewingClass.classCode} | {viewingQuestionCount} selected question(s)
                   </p>
                 </div>
-                <button className="btn-ghost px-3 py-1.5 text-sm" onClick={() => setViewingClass(null)}>
+                <button className="btn-ghost mt-3 w-full px-3 py-2 text-sm sm:mt-0 sm:w-auto" onClick={() => setViewingClass(null)}>
                   Close
                 </button>
               </div>
@@ -274,32 +288,39 @@ const TeacherDashboard = () => {
                 <p className="text-muted text-sm">No tests have been created for this class yet.</p>
               ) : (
                 <div className="space-y-4">
-                  {viewingClassTests.map((test) => (
+                  {viewingClassTests.map((test) => {
+                    const testQuestions = getTestQuestions(test);
+
+                    return (
                     <div key={test._id} className="rounded-xl bg-surface border border-white/5 p-4">
                       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between mb-3">
                         <div>
                           <p className="font-medium">{test.title}</p>
                           <p className="text-muted text-xs">
-                            {test.status} | {test.questions?.length || 0} question(s) | {test.totalMarks} mark(s)
+                            {test.status} | {testQuestions.length} question(s) | {test.totalMarks} mark(s)
                           </p>
                         </div>
                       </div>
 
-                      {test.questions?.length > 0 ? (
+                      {testQuestions.length > 0 ? (
                         <div className="space-y-3">
-                          {test.questions.map((question, index) => (
-                            <div key={question._id || `${test._id}-${index}`} className="border-t border-white/5 pt-3">
+                          {testQuestions.map((question, index) => (
+                            <div key={question._id || `${test._id}-${index}`} className="rounded-lg border border-white/5 bg-card p-3">
                               <p className="text-xs text-muted mb-1">
-                                Question {index + 1} | {question.chapter} | {question.marks} mark(s)
+                                Question {index + 1}
+                                {question.chapter ? ` | ${question.chapter}` : ''}
+                                {question.marks ? ` | ${question.marks} mark(s)` : ''}
                               </p>
-                              <p className="text-sm whitespace-pre-wrap">{question.questionText}</p>
+                              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                                {question.questionText || 'Question details are not available. Please refresh after the backend restarts.'}
+                              </p>
                               {question.imageUrl && (
                                 <img src={question.imageUrl} alt="question diagram" className="mt-3 rounded-lg max-h-72 object-contain" />
                               )}
                               {question.options?.length > 0 && (
                                 <div className="mt-3 space-y-2">
                                   {question.options.map((option, optionIndex) => (
-                                    <p key={`${question._id}-${optionIndex}`} className="rounded-lg bg-card p-2 text-xs">
+                                    <p key={`${question._id}-${optionIndex}`} className="rounded-lg bg-surface p-2 text-xs break-words">
                                       {String.fromCharCode(65 + optionIndex)}. {option}
                                     </p>
                                   ))}
@@ -312,7 +333,8 @@ const TeacherDashboard = () => {
                         <p className="text-muted text-sm">No questions were selected for this test.</p>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
