@@ -4,6 +4,7 @@ import api from '../api/axios.js';
 
 const TeacherReports = () => {
   const [classes, setClasses] = useState([]);
+  const [tests, setTests] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedTestId, setSelectedTestId] = useState('');
   const [report, setReport] = useState(null);
@@ -13,19 +14,24 @@ const TeacherReports = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const loadClasses = async () => {
+    const loadFilters = async () => {
       try {
-        const { data } = await api.get('/classes');
-        setClasses(data.classes);
-        if (data.classes.length) {
-          setSelectedClassId(data.classes[0]._id);
+        const [classesRes, testsRes] = await Promise.all([
+          api.get('/classes'),
+          api.get('/tests/mine'),
+        ]);
+        const loadedClasses = classesRes.data.classes || [];
+        setClasses(loadedClasses);
+        setTests(testsRes.data.tests || []);
+        if (loadedClasses.length) {
+          setSelectedClassId(loadedClasses[0]._id);
         }
       } catch (err) {
-        setError('Could not load classes');
+        setError('Could not load report filters');
       }
     };
 
-    loadClasses();
+    loadFilters();
   }, []);
 
   useEffect(() => {
@@ -58,11 +64,27 @@ const TeacherReports = () => {
     [classes, selectedClassId]
   );
 
+  const getId = (value) => String(value?._id || value || '');
+
+  const selectedClassTests = useMemo(
+    () => tests.filter((test) => getId(test.class) === selectedClassId),
+    [tests, selectedClassId]
+  );
+
+  useEffect(() => {
+    if (selectedTestId && !selectedClassTests.some((test) => test._id === selectedTestId)) {
+      setSelectedTestId('');
+    }
+  }, [selectedClassTests, selectedTestId]);
+
   const reportCards = report ? [
     { label: 'Class Average', value: `${report.summary.classAverage}%` },
     { label: 'Attempts', value: report.summary.totalAttempts },
     { label: 'Attempted Students', value: `${report.summary.attemptedStudents}/${report.summary.totalStudents}` },
-    { label: 'Joined Students', value: report.summary.joinedStudents ?? report.students.length },
+    {
+      label: selectedTestId ? 'Shown Students' : 'Joined Students',
+      value: selectedTestId ? report.students.length : (report.summary.joinedStudents ?? report.students.length),
+    },
   ] : [];
 
   const getMarksSummary = (studentReport) => {
@@ -82,7 +104,7 @@ const TeacherReports = () => {
       });
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
-      const selectedTest = report?.availableTests?.find((test) => test.testId === selectedTestId);
+      const selectedTest = selectedClassTests.find((test) => test._id === selectedTestId);
       const filename = `${selectedClass?.name || 'class'}${selectedTest ? `-${selectedTest.title}` : ''}-report.pdf`
         .replace(/[^a-z0-9.-]/gi, '-')
         .toLowerCase();
@@ -124,11 +146,11 @@ const TeacherReports = () => {
               className="input-field sm:w-64"
               value={selectedTestId}
               onChange={(e) => setSelectedTestId(e.target.value)}
-              disabled={!report?.availableTests?.length}
+              disabled={!selectedClassTests.length}
             >
               <option value="">Select your class title</option>
-              {report?.availableTests?.map((test) => (
-                <option key={test.testId} value={test.testId}>{test.title}</option>
+              {selectedClassTests.map((test) => (
+                <option key={test._id} value={test._id}>{test.title}</option>
               ))}
             </select>
             <button
@@ -160,7 +182,9 @@ const TeacherReports = () => {
 
               <div className="space-y-3">
                 {report.students.length === 0 ? (
-                  <p className="text-muted text-sm">No students have joined this class yet.</p>
+                  <p className="text-muted text-sm">
+                    {selectedTestId ? 'No students have attended this test yet.' : 'No students have joined this class yet.'}
+                  </p>
                 ) : report.students.map((studentReport) => {
                   const isExpanded = expandedStudentId === studentReport.student._id;
                   return (
