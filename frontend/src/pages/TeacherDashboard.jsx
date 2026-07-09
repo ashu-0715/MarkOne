@@ -7,9 +7,9 @@ const TeacherDashboard = () => {
   const [tests, setTests] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [showNewClass, setShowNewClass] = useState(false);
-  const [newClass, setNewClass] = useState({ name: '', subject: '', className: '', section: '' });
+  const [newClass, setNewClass] = useState({ name: '', subject: '', classCode: '' });
   const [editingClass, setEditingClass] = useState(null);
-  const [editClassForm, setEditClassForm] = useState({ name: '', subject: '' });
+  const [editClassForm, setEditClassForm] = useState({ name: '', subject: '', classCode: '' });
   const [copiedClassId, setCopiedClassId] = useState('');
   const [error, setError] = useState('');
 
@@ -42,7 +42,7 @@ const TeacherDashboard = () => {
     try {
       await api.post('/classes', newClass);
       setShowNewClass(false);
-      setNewClass({ name: '', subject: '', className: '', section: '' });
+      setNewClass({ name: '', subject: '', classCode: '' });
       loadData();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create class');
@@ -61,7 +61,7 @@ const TeacherDashboard = () => {
 
   const openEditClass = (classItem) => {
     setEditingClass(classItem);
-    setEditClassForm({ name: classItem.name, subject: classItem.subject });
+    setEditClassForm({ name: classItem.name, subject: classItem.subject, classCode: classItem.classCode });
     setError('');
   };
 
@@ -72,7 +72,7 @@ const TeacherDashboard = () => {
     try {
       await api.patch(`/classes/${editingClass._id}`, editClassForm);
       setEditingClass(null);
-      setEditClassForm({ name: '', subject: '' });
+      setEditClassForm({ name: '', subject: '', classCode: '' });
       loadData();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update class');
@@ -193,10 +193,8 @@ const TeacherDashboard = () => {
                 value={newClass.name} onChange={(e) => setNewClass({ ...newClass, name: e.target.value })} />
               <input required placeholder="Subject" className="input-field"
                 value={newClass.subject} onChange={(e) => setNewClass({ ...newClass, subject: e.target.value })} />
-              <input required placeholder="Class (e.g. XII)" className="input-field"
-                value={newClass.className} onChange={(e) => setNewClass({ ...newClass, className: e.target.value })} />
-              <input required placeholder="Section (e.g. A)" className="input-field"
-                value={newClass.section} onChange={(e) => setNewClass({ ...newClass, section: e.target.value })} />
+              <input required placeholder="Class Code (e.g. PHY12A)" className="input-field"
+                value={newClass.classCode} onChange={(e) => setNewClass({ ...newClass, classCode: e.target.value.toUpperCase() })} />
               <div className="flex flex-col gap-3 pt-2 sm:flex-row">
                 <button type="button" className="btn-ghost flex-1" onClick={() => setShowNewClass(false)}>Cancel</button>
                 <button className="btn-accent flex-1">Create</button>
@@ -223,7 +221,14 @@ const TeacherDashboard = () => {
                 value={editClassForm.subject}
                 onChange={(e) => setEditClassForm({ ...editClassForm, subject: e.target.value })}
               />
-              <p className="text-muted text-xs">Class code stays the same so existing students do not lose access.</p>
+              <input
+                required
+                placeholder="Class Code"
+                className="input-field"
+                value={editClassForm.classCode}
+                onChange={(e) => setEditClassForm({ ...editClassForm, classCode: e.target.value.toUpperCase() })}
+              />
+              <p className="text-muted text-xs">Students must use the latest class code to join.</p>
               <div className="flex flex-col gap-3 pt-2 sm:flex-row">
                 <button
                   type="button"
