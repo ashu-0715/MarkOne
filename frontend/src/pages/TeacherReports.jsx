@@ -71,19 +71,56 @@ const TeacherReports = () => {
     [tests, selectedClassId]
   );
 
+  const selectedTest = useMemo(
+    () => selectedClassTests.find((test) => test._id === selectedTestId),
+    [selectedClassTests, selectedTestId]
+  );
+
   useEffect(() => {
     if (selectedTestId && !selectedClassTests.some((test) => test._id === selectedTestId)) {
       setSelectedTestId('');
     }
   }, [selectedClassTests, selectedTestId]);
 
+  const visibleStudentReports = useMemo(() => {
+    if (!report) return [];
+    if (!selectedTestId) return report.students;
+
+    return report.students
+      .map((studentReport) => ({
+        ...studentReport,
+        attempts: studentReport.attempts.filter((attempt) => getId(attempt.testId) === selectedTestId),
+      }))
+      .filter((studentReport) => studentReport.attempts.length > 0);
+  }, [report, selectedTestId]);
+
+  const visibleAttemptCount = visibleStudentReports.reduce(
+    (sum, studentReport) => sum + studentReport.attempts.length,
+    0
+  );
+
+  const visibleAverage = visibleStudentReports.length
+    ? Math.round(
+        (visibleStudentReports.reduce((sum, studentReport) => {
+          const studentAverage = studentReport.attempts.reduce(
+            (attemptSum, attempt) => attemptSum + (attempt.percentage || 0),
+            0
+          ) / studentReport.attempts.length;
+          return sum + studentAverage;
+        }, 0) / visibleStudentReports.length) * 100
+      ) / 100
+    : 0;
+
   const reportCards = report ? [
-    { label: 'Class Average', value: `${report.summary.classAverage}%` },
-    { label: 'Attempts', value: report.summary.totalAttempts },
-    { label: 'Attempted Students', value: `${report.summary.attemptedStudents}/${report.summary.totalStudents}` },
+    { label: 'Class Average', value: `${selectedTestId ? visibleAverage : report.summary.classAverage}%` },
+    { label: 'Attempts', value: selectedTestId ? visibleAttemptCount : report.summary.totalAttempts },
+    {
+      label: 'Attempted Students',
+      value: `${selectedTestId ? visibleStudentReports.length : report.summary.attemptedStudents}/${selectedTestId ? (selectedTest?.totalStudents || report.summary.totalStudents) : report.summary.totalStudents}`,
+    },
     {
       label: selectedTestId ? 'Shown Students' : 'Joined Students',
-      value: selectedTestId ? report.students.length : (report.summary.joinedStudents ?? report.students.length),
+      value: selectedTestId ? visibleStudentReports.length : (report.summary.joinedStudents ?? visibleStudentReports.length),
     },
   ] : [];
 
@@ -104,7 +141,6 @@ const TeacherReports = () => {
       });
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
-      const selectedTest = selectedClassTests.find((test) => test._id === selectedTestId);
       const filename = `${selectedClass?.name || 'class'}${selectedTest ? `-${selectedTest.title}` : ''}-report.pdf`
         .replace(/[^a-z0-9.-]/gi, '-')
         .toLowerCase();
@@ -181,11 +217,11 @@ const TeacherReports = () => {
               </div>
 
               <div className="space-y-3">
-                {report.students.length === 0 ? (
+                {visibleStudentReports.length === 0 ? (
                   <p className="text-muted text-sm">
                     {selectedTestId ? 'No students have attended this test yet.' : 'No students have joined this class yet.'}
                   </p>
-                ) : report.students.map((studentReport) => {
+                ) : visibleStudentReports.map((studentReport) => {
                   const isExpanded = expandedStudentId === studentReport.student._id;
                   return (
                     <div key={studentReport.student._id} className="bg-surface rounded-xl border border-white/5 overflow-hidden">
