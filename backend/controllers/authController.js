@@ -68,7 +68,7 @@ export const verifyTeacherOtp = async (req, res) => {
 export const loginTeacher = async (req, res) => {
   try {
     const { teacherName, subject, uniqueId, identifier, password } = req.body;
-    const allowedTeacherIds = ['ASH2007', 'Ravi1983'];
+    const allowedTeacherIds = ['ASH2007', 'Ravi1983', 'Bala2026'];
 
     if (uniqueId) {
       const trimmedName = teacherName?.trim();

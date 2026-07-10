@@ -34,9 +34,30 @@ if (payload.correctAnswer) {
 
 export const updateQuestion = async (req, res) => {
   try {
+    const payload = { ...req.body };
+
+    if (payload.correctAnswer) {
+      payload.correctAnswer = payload.correctAnswer
+        .replace(/^[a-dA-D][).]\s*/, '')
+        .trim()
+        .toLowerCase();
+    }
+
+    if (payload.questionText) {
+      payload.contentHash = hashContent(payload.questionText);
+      const duplicate = await Question.findOne({
+        teacher: req.user._id,
+        contentHash: payload.contentHash,
+        _id: { $ne: req.params.id },
+      });
+      if (duplicate) {
+        return res.status(409).json({ message: 'A very similar question already exists in your bank', duplicate });
+      }
+    }
+
     const question = await Question.findOneAndUpdate(
       { _id: req.params.id, teacher: req.user._id },
-      req.body,
+      payload,
       { new: true, runValidators: true }
     );
     if (!question) return res.status(404).json({ message: 'Question not found' });

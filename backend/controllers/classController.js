@@ -1,20 +1,26 @@
 import ClassModel from '../models/Class.js';
 import Student from '../models/Student.js';
-import { generateClassCode } from '../utils/generateId.js';
+
+const normalizeClassCode = (value) => value?.trim().toUpperCase();
 
 export const createClass = async (req, res) => {
   try {
-    const { name, subject, className, section } = req.body;
+    const { name, subject, classCode } = req.body;
+    const normalizedClassCode = normalizeClassCode(classCode);
 
-    let classCode;
-    do {
-      classCode = generateClassCode(subject, className, section);
-    } while (await ClassModel.findOne({ classCode }));
+    if (!normalizedClassCode) {
+      return res.status(400).json({ message: 'Class code is required' });
+    }
+
+    const existingClass = await ClassModel.findOne({ classCode: normalizedClassCode });
+    if (existingClass) {
+      return res.status(409).json({ message: 'Class code already exists. Choose another code.' });
+    }
 
     const newClass = await ClassModel.create({
       name,
       subject,
-      classCode,
+      classCode: normalizedClassCode,
       teacher: req.user._id,
     });
 
@@ -36,11 +42,29 @@ export const getMyClasses = async (req, res) => {
 export const updateClass = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, subject } = req.body;
+    const { name, subject, classCode } = req.body;
+    const update = { name, subject };
+
+    if (classCode !== undefined) {
+      const normalizedClassCode = normalizeClassCode(classCode);
+      if (!normalizedClassCode) {
+        return res.status(400).json({ message: 'Class code is required' });
+      }
+
+      const existingClass = await ClassModel.findOne({
+        classCode: normalizedClassCode,
+        _id: { $ne: id },
+      });
+      if (existingClass) {
+        return res.status(409).json({ message: 'Class code already exists. Choose another code.' });
+      }
+
+      update.classCode = normalizedClassCode;
+    }
 
     const updatedClass = await ClassModel.findOneAndUpdate(
       { _id: id, teacher: req.user._id, isActive: true },
-      { name, subject },
+      update,
       { new: true, runValidators: true }
     );
 

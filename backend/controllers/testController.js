@@ -59,7 +59,9 @@ export const publishTest = async (req, res) => {
 
 export const getMyTests = async (req, res) => {
   try {
-    const tests = await Test.find({ teacher: req.user._id }).sort({ createdAt: -1 });
+    const tests = await Test.find({ teacher: req.user._id })
+      .populate('questions', 'type subject chapter difficulty questionText options correctAnswer explanation marks imageUrl')
+      .sort({ createdAt: -1 });
     res.json({ tests });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch tests', error: err.message });

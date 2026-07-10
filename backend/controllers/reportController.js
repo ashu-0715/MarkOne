@@ -73,16 +73,21 @@ const mapAttempt = (attempt) => {
   };
 };
 
-const buildClassAnalysis = async (classId, teacherId) => {
+const buildClassAnalysis = async (classId, teacherId, filters = {}) => {
+  const { testId } = filters;
   const classInfo = await Class.findOne({ _id: classId, teacher: teacherId }).select('name subject classCode studentCount');
   if (!classInfo) return null;
 
-  const [students, tests] = await Promise.all([
+  const [students, allTests] = await Promise.all([
     Student.find({ class: classId, teacher: teacherId, isActive: true })
       .select('name rollNumber className section')
       .sort({ rollNumber: 1, name: 1 }),
     Test.find({ class: classId, teacher: teacherId }).select('_id title subject totalMarks totalStudents').sort({ createdAt: -1 }),
   ]);
+
+  const tests = testId
+    ? allTests.filter((test) => test._id.toString() === testId)
+    : allTests;
 
   const testIds = tests.map((test) => test._id);
   const attempts = await TestAttempt.find({ test: { $in: testIds }, status: { $ne: 'in_progress' } })
@@ -128,6 +133,7 @@ const buildClassAnalysis = async (classId, teacherId) => {
   });
 
   const attemptedStudents = studentsReport.filter((student) => student.attemptedTests > 0);
+  const visibleStudents = testId ? attemptedStudents : studentsReport;
   const configuredTotalStudents = tests.reduce(
     (max, test) => Math.max(max, Number(test.totalStudents) || 0),
     0
@@ -142,11 +148,19 @@ const buildClassAnalysis = async (classId, teacherId) => {
     summary: {
       totalStudents: expectedStudents,
       joinedStudents: students.length,
+      displayedStudents: visibleStudents.length,
       totalTests: tests.length,
+      availableTests: allTests.length,
       totalAttempts: attempts.length,
       attemptedStudents: attemptedStudents.length,
       classAverage,
     },
+    availableTests: allTests.map((test) => ({
+      testId: test._id,
+      title: test.title,
+      subject: test.subject,
+      totalMarks: test.totalMarks,
+    })),
     tests: tests.map((test) => {
       const testAttempts = attempts.filter((attempt) => attempt.test?._id?.toString() === test._id.toString());
       return {
@@ -160,14 +174,14 @@ const buildClassAnalysis = async (classId, teacherId) => {
           : 0,
       };
     }),
-    students: studentsReport,
+    students: visibleStudents,
   };
 };
 
 export const getClassReport = async (req, res) => {
   try {
     const { classId } = req.params;
-    const analysis = await buildClassAnalysis(classId, req.user._id);
+    const analysis = await buildClassAnalysis(classId, req.user._id, { testId: req.query.testId });
     if (!analysis) return res.status(404).json({ message: 'Class not found' });
 
     res.json({ report: analysis.tests, analysis });
@@ -229,7 +243,7 @@ export const getQuestionAnalysis = async (req, res) => {
 export const exportClassReportExcel = async (req, res) => {
   try {
     const { classId } = req.params;
-    const analysis = await buildClassAnalysis(classId, req.user._id);
+    const analysis = await buildClassAnalysis(classId, req.user._id, { testId: req.query.testId });
     if (!analysis) return res.status(404).json({ message: 'Class not found' });
 
     const workbook = new ExcelJS.Workbook();
@@ -283,7 +297,7 @@ export const exportClassReportExcel = async (req, res) => {
 export const exportClassReportPdf = async (req, res) => {
   try {
     const { classId } = req.params;
-    const analysis = await buildClassAnalysis(classId, req.user._id);
+    const analysis = await buildClassAnalysis(classId, req.user._id, { testId: req.query.testId });
     if (!analysis) return res.status(404).json({ message: 'Class not found' });
 
     const safeFileName = analysis.class.name.replace(/[^a-z0-9]/gi, '-').toLowerCase();

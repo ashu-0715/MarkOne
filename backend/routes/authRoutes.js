@@ -1,7 +1,7 @@
 import express from 'express';
 import { body } from 'express-validator';
 import { registerTeacher, verifyTeacherOtp, loginTeacher, joinAsStudent } from '../controllers/authController.js';
-import { authLimiter } from '../middleware/rateLimiter.js';
+import { authLimiter, loginLimiter, studentJoinLimiter } from '../middleware/rateLimiter.js';
 import { validate } from '../middleware/validate.js';
 
 const router = express.Router();
@@ -20,11 +20,11 @@ router.post(
 );
 
 router.post('/teacher/verify-otp', authLimiter, verifyTeacherOtp);
-router.post('/teacher/login', authLimiter, loginTeacher);
+router.post('/teacher/login', loginLimiter, loginTeacher);
 
 router.post(
   '/student/join',
-  authLimiter,
+  studentJoinLimiter,
   [
     body('name').trim().notEmpty(),
     body('rollNumber').trim().notEmpty(),
