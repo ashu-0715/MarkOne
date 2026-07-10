@@ -328,7 +328,7 @@ const QuestionBank = () => {
               <h3 className="font-semibold text-lg">Paste Questions</h3>
               <p className="text-muted text-sm">Paste questions (from ChatGPT or elsewhere). Separate each question with a blank line.</p>
               <textarea rows={10} className="input-field" value={rawText} onChange={(e) => setRawText(e.target.value)}
-                placeholder={'1) What is Newton\'s second law?\nA) F=ma\nB) E=mc^2\nAnswer: A'} />
+                placeholder={'1) What is Newton\'s second law?\nA)F=ma\nB)E=mc^2\nAnswer: A)F=ma'} />
               <div className="flex gap-3">
                 <button className="btn-ghost flex-1" onClick={() => setPasteMode(false)}>Cancel</button>
                 <button className="btn-accent flex-1" onClick={handleParsePasted}>Import</button>
