@@ -105,7 +105,7 @@ export const getClassStudents = async (req, res) => {
     const page = Math.max(parseInt(req.query.page) || 1, 1);
     const limit = Math.min(parseInt(req.query.limit) || 50, 100);
 
-    const classDoc = await ClassModel.findOne({ _id: id, teacher: req.user._id });
+    const classDoc = await ClassModel.findOne({ _id: id, teacher: req.user._id, isActive: true });
     if (!classDoc) return res.status(404).json({ message: 'Class not found' });
 
     const [students, total] = await Promise.all([

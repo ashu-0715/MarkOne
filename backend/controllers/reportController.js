@@ -75,7 +75,7 @@ const mapAttempt = (attempt) => {
 
 const buildClassAnalysis = async (classId, teacherId, filters = {}) => {
   const { testId } = filters;
-  const classInfo = await Class.findOne({ _id: classId, teacher: teacherId }).select('name subject classCode studentCount');
+  const classInfo = await Class.findOne({ _id: classId, teacher: teacherId, isActive: true }).select('name subject classCode studentCount');
   if (!classInfo) return null;
 
   const [students, allTests] = await Promise.all([
@@ -321,11 +321,6 @@ export const exportClassReportPdf = async (req, res) => {
     analysis.students.forEach((studentReport, index) => {
       if (index > 0) doc.moveDown();
       doc.fontSize(13).fillColor('#111').text(`${studentReport.student.name} (Roll ${studentReport.student.rollNumber})`);
-      doc
-        .fontSize(10)
-        .fillColor('#444')
-        .text(`Average: ${studentReport.averagePercentage}% | Tests attempted: ${studentReport.attemptedTests}/${studentReport.totalTests} | ${studentReport.performanceBand}`);
-
       if (!studentReport.attempts.length) {
         doc.fontSize(10).fillColor('#777').text('No submitted attempts yet.');
         return;
@@ -333,22 +328,6 @@ export const exportClassReportPdf = async (req, res) => {
 
       studentReport.attempts.forEach((attempt) => {
         doc.fontSize(10).fillColor('#111').text(`${attempt.testTitle}: ${attempt.score}/${attempt.totalMarks} (${attempt.percentage}%)`);
-        doc
-          .fillColor('#555')
-          .text(`Correct: ${attempt.correctCount} | Wrong: ${attempt.wrongCount} | Skipped: ${attempt.skippedCount} | Avg time/question: ${attempt.averageTimePerQuestion}s`);
-        doc.text(`Strong chapters: ${attempt.strongChapters.join(', ') || 'None'}`);
-        doc.text(`Needs revision: ${attempt.weakChapters.join(', ') || 'None'}`);
-        attempt.answers.forEach((answer, answerIndex) => {
-          const result = answer.isSkipped ? 'Skipped' : answer.isCorrect ? 'Correct' : 'Wrong';
-          doc
-            .fontSize(9)
-            .fillColor('#333')
-            .text(`${answerIndex + 1}. ${answer.questionText}`);
-          doc
-            .fillColor('#666')
-            .text(`Chapter: ${answer.chapter} | Result: ${result} | Answer: ${answer.givenAnswer}${answer.isCorrect ? '' : ` | Correct: ${answer.correctAnswer}`}`);
-        });
-        doc.moveDown(0.3);
       });
     });
 

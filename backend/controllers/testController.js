@@ -1,6 +1,7 @@
 import Test from '../models/Test.js';
 import Question from '../models/Question.js';
 import TestAttempt from '../models/TestAttempt.js';
+import Class from '../models/Class.js';
 
 const shuffleArray = (arr) => {
   const a = [...arr];
@@ -21,6 +22,8 @@ const getScheduleError = (test) => {
 export const createTest = async (req, res) => {
   try {
     const payload = { ...req.body, teacher: req.user._id };
+    const classInfo = await Class.findOne({ _id: payload.class, teacher: req.user._id, isActive: true });
+    if (!classInfo) return res.status(404).json({ message: 'Active class not found' });
     if (payload.availableFrom) payload.availableFrom = new Date(payload.availableFrom);
     if (payload.availableUntil) payload.availableUntil = new Date(payload.availableUntil);
     if (payload.availableFrom && Number.isNaN(payload.availableFrom.getTime())) {
@@ -45,8 +48,9 @@ export const createTest = async (req, res) => {
 
 export const publishTest = async (req, res) => {
   try {
+    const activeClassIds = await Class.find({ teacher: req.user._id, isActive: true }).distinct('_id');
     const test = await Test.findOneAndUpdate(
-      { _id: req.params.id, teacher: req.user._id },
+      { _id: req.params.id, teacher: req.user._id, class: { $in: activeClassIds } },
       { status: 'published' },
       { new: true }
     );
@@ -59,7 +63,8 @@ export const publishTest = async (req, res) => {
 
 export const getMyTests = async (req, res) => {
   try {
-    const tests = await Test.find({ teacher: req.user._id })
+    const activeClassIds = await Class.find({ teacher: req.user._id, isActive: true }).distinct('_id');
+    const tests = await Test.find({ teacher: req.user._id, class: { $in: activeClassIds } })
       .populate('questions', 'type subject chapter difficulty questionText options correctAnswer explanation marks imageUrl')
       .sort({ createdAt: -1 });
     res.json({ tests });
@@ -121,6 +126,8 @@ export const getMyAttemptResult = async (req, res) => {
 // Student-facing: list published tests for the student's class, plus their attempt status
 export const getAvailableTestsForStudent = async (req, res) => {
   try {
+    const activeClass = await Class.exists({ _id: req.user.class, isActive: true });
+    if (!activeClass) return res.json({ tests: [] });
     const now = new Date();
     const tests = await Test.find({
       class: req.user.class,
@@ -150,6 +157,8 @@ export const getAvailableTestsForStudent = async (req, res) => {
 // Student-facing: fetch a published test for their class, with answers stripped
 export const getTestForStudent = async (req, res) => {
   try {
+    const activeClass = await Class.exists({ _id: req.user.class, isActive: true });
+    if (!activeClass) return res.status(404).json({ message: 'Test not available' });
     const test = await Test.findOne({
       _id: req.params.id,
       class: req.user.class,
@@ -194,7 +203,9 @@ export const getTestForStudent = async (req, res) => {
 export const submitTestAttempt = async (req, res) => {
   try {
     const { answers, status } = req.body; // answers: [{ questionId, givenAnswer, timeTakenSeconds }]
-    const test = await Test.findById(req.params.id).populate('questions');
+    const activeClass = await Class.exists({ _id: req.user.class, isActive: true });
+    if (!activeClass) return res.status(404).json({ message: 'Test not found' });
+    const test = await Test.findOne({ _id: req.params.id, class: req.user.class, status: 'published' }).populate('questions');
     if (!test) return res.status(404).json({ message: 'Test not found' });
     const scheduleError = getScheduleError(test);
     if (scheduleError) return res.status(403).json({ message: scheduleError });
