@@ -2,6 +2,12 @@ import Test from '../models/Test.js';
 import Question from '../models/Question.js';
 import TestAttempt from '../models/TestAttempt.js';
 import Class from '../models/Class.js';
+import PDFDocument from 'pdfkit';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+const reportFontPath = path.join(currentDirectory, '../assets/fonts/NotoSansTamil.ttf');
 
 const shuffleArray = (arr) => {
   const a = [...arr];
@@ -17,6 +23,17 @@ const getScheduleError = (test) => {
   if (test.availableFrom && now < test.availableFrom) return 'This test has not started yet';
   if (test.availableUntil && now > test.availableUntil) return 'This test is closed';
   return '';
+};
+
+const safeFilePart = (value, fallback) => {
+  const cleaned = String(value || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
+  return cleaned || fallback;
+};
+
+const startReviewPage = (doc, continued = false) => {
+  doc.addPage();
+  doc.font('Tamil').fillColor('#1e293b').fontSize(15).text(continued ? 'Question review (continued)' : 'Question review');
+  doc.moveDown(0.8);
 };
 
 export const createTest = async (req, res) => {
@@ -120,6 +137,117 @@ export const getMyAttemptResult = async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch result', error: err.message });
+  }
+};
+
+// Student-facing: download a complete, private revision report for a submitted test.
+export const downloadMyAttemptReport = async (req, res) => {
+  try {
+    const test = await Test.findOne({ _id: req.params.id, class: req.user.class }).populate('questions');
+    if (!test) return res.status(404).json({ message: 'Test not found' });
+
+    const attempt = await TestAttempt.findOne({
+      test: test._id,
+      student: req.user._id,
+      status: { $in: ['submitted', 'auto_submitted'] },
+    });
+    if (!attempt) return res.status(404).json({ message: 'No submitted attempt found for this test' });
+
+    const answersByQuestion = new Map(attempt.answers.map((answer) => [answer.question.toString(), answer]));
+    const filename = `${safeFilePart(test.title, 'test')}-revision-report.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    const doc = new PDFDocument({ margin: 45, size: 'A4', bufferPages: true, info: { Title: `${test.title} Revision Report` } });
+    doc.pipe(res);
+    doc.registerFont('Tamil', reportFontPath);
+    doc.font('Tamil');
+
+    const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const contentX = doc.page.margins.left;
+
+    doc.fillColor('#4f46e5').fontSize(9).text('MARKONE | PERSONAL REVISION REPORT', { align: 'center' });
+    doc.moveDown(0.35);
+    doc.fillColor('#172554').fontSize(21).text(test.title, { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(10).fillColor('#475569').text(`Student: ${req.user.name} | Roll no.: ${req.user.rollNumber}`, { align: 'center' });
+    doc.text(`Submitted: ${attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString() : 'Not available'}`, { align: 'center' });
+    doc.moveDown();
+
+    const summaryGap = 9;
+    const summaryWidth = (contentWidth - summaryGap * 2) / 3;
+    const summaryY = doc.y;
+    const summaryCards = [
+      { label: 'FINAL SCORE', value: `${attempt.score}/${test.totalMarks}`, color: '#4f46e5', background: '#eef2ff' },
+      { label: 'PERCENTAGE', value: `${attempt.percentage}%`, color: '#0369a1', background: '#e0f2fe' },
+      { label: 'TO REVISE', value: `${attempt.wrongCount + attempt.skippedCount} question(s)`, color: '#b45309', background: '#fef3c7' },
+    ];
+    summaryCards.forEach((card, index) => {
+      const x = contentX + index * (summaryWidth + summaryGap);
+      doc.roundedRect(x, summaryY, summaryWidth, 60, 8).fill(card.background);
+      doc.fillColor(card.color).fontSize(8).text(card.label, x + 12, summaryY + 12, { width: summaryWidth - 24, align: 'center' });
+      doc.fontSize(13).text(card.value, x + 12, summaryY + 30, { width: summaryWidth - 24, align: 'center' });
+    });
+    doc.y = summaryY + 80;
+
+    doc.fillColor('#1e293b').fontSize(15).text('Question review');
+    doc.fillColor('#64748b').fontSize(9).text('Review the amber and red cards first, then use the explanations to revise.');
+    doc.moveDown(0.8);
+
+    test.questions.forEach((question, index) => {
+      const answer = answersByQuestion.get(question._id.toString());
+      const status = answer?.isSkipped ? 'Skipped' : answer?.isCorrect ? 'Correct' : 'Incorrect';
+      const statusColor = answer?.isSkipped ? '#b45309' : answer?.isCorrect ? '#15803d' : '#dc2626';
+      const statusBackground = answer?.isSkipped ? '#fef3c7' : answer?.isCorrect ? '#dcfce7' : '#fee2e2';
+      const textWidth = contentWidth - 36;
+      doc.font('Tamil').fontSize(12);
+      const questionHeight = doc.heightOfString(`${index + 1}. ${question.questionText}`, { width: textWidth });
+      doc.fontSize(10);
+      const answerHeight = doc.heightOfString(`Your answer: ${answer?.givenAnswer || 'Skipped'}`, { width: textWidth })
+        + doc.heightOfString(`Correct answer: ${question.correctAnswer || 'Not available'}`, { width: textWidth });
+      const explanationHeight = question.explanation
+        ? doc.heightOfString(`Why: ${question.explanation}`, { width: textWidth })
+        : 0;
+      const cardHeight = 84 + questionHeight + answerHeight + (question.explanation ? 17 + explanationHeight : 0);
+      if (doc.y + cardHeight > doc.page.height - doc.page.margins.bottom - 25) startReviewPage(doc, true);
+
+      const cardY = doc.y;
+      doc.roundedRect(contentX, cardY, contentWidth, cardHeight, 9).fill('#ffffff').strokeColor('#e2e8f0').stroke();
+      doc.roundedRect(contentX, cardY, 6, cardHeight, 4).fill(statusColor);
+      doc.roundedRect(contentX + 18, cardY + 14, 70, 20, 10).fill(statusBackground);
+      doc.fillColor(statusColor).fontSize(8).text(status.toUpperCase(), contentX + 21, cardY + 20, { width: 64, align: 'center' });
+      doc.fillColor('#0f172a').fontSize(12).text(`${index + 1}. ${question.questionText}`, contentX + 18, cardY + 44, { width: textWidth });
+
+      let lineY = cardY + 50 + questionHeight;
+      doc.fillColor('#64748b').fontSize(8).text('YOUR ANSWER', contentX + 18, lineY);
+      lineY += 12;
+      doc.fillColor(answer?.isCorrect ? '#15803d' : '#334155').fontSize(10).text(answer?.givenAnswer || 'Skipped', contentX + 18, lineY, { width: textWidth });
+      lineY += doc.heightOfString(answer?.givenAnswer || 'Skipped', { width: textWidth }) + 5;
+      doc.fillColor('#64748b').fontSize(8).text('CORRECT ANSWER', contentX + 18, lineY);
+      lineY += 12;
+      doc.fillColor('#15803d').fontSize(10).text(question.correctAnswer || 'Not available', contentX + 18, lineY, { width: textWidth });
+      lineY += doc.heightOfString(question.correctAnswer || 'Not available', { width: textWidth }) + 5;
+      if (question.explanation) {
+        doc.fillColor('#64748b').fontSize(8).text('REVISION NOTE', contentX + 18, lineY);
+        lineY += 12;
+        doc.fillColor('#475569').fontSize(9).text(question.explanation, contentX + 18, lineY, { width: textWidth });
+      }
+      doc.y = cardY + cardHeight + 10;
+    });
+
+    const range = doc.bufferedPageRange();
+    for (let page = 0; page < range.count; page += 1) {
+      doc.switchToPage(page);
+      doc.font('Tamil').fontSize(8).fillColor('#64748b').text(
+        `Revision report | Page ${page + 1} of ${range.count}`,
+        doc.page.margins.left,
+        doc.page.height - 70,
+        { align: 'center', width: doc.page.width - doc.page.margins.left - doc.page.margins.right }
+      );
+    }
+    doc.end();
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to generate revision report', error: err.message });
   }
 };
 
