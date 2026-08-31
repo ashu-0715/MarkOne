@@ -8,6 +8,7 @@ const emptyConfig = {
   class: '',
   totalStudents: '',
   chapter: '',
+  questionSet: '',
   timeLimitMinutes: '',
   scheduleEnabled: false,
   scheduleStartDate: '',
@@ -73,6 +74,7 @@ const QuestionPreview = ({ question, onClose }) => {
 const CreateTest = () => {
   const [classes, setClasses] = useState([]);
   const [questions, setQuestions] = useState([]);
+  const [questionSets, setQuestionSets] = useState([]);
   const [selectedQuestions, setSelectedQuestions] = useState([]);
   const [activeQuestion, setActiveQuestion] = useState(null);
   const [config, setConfig] = useState(emptyConfig);
@@ -89,8 +91,19 @@ const CreateTest = () => {
 
   useEffect(() => {
     api.get('/classes').then((res) => setClasses(res.data.classes));
-    api.get('/questions', { params: { limit: 100 } }).then((res) => setQuestions(res.data.questions));
+    api.get('/questions/sets').then((res) => setQuestionSets(res.data.questionSets));
   }, []);
+
+  useEffect(() => {
+    setSelectedQuestions([]);
+    if (!config.questionSet) {
+      setQuestions([]);
+      return;
+    }
+    api.get('/questions', { params: { limit: 100, questionSet: config.questionSet } })
+      .then((res) => setQuestions(res.data.questions))
+      .catch(() => setQuestions([]));
+  }, [config.questionSet]);
 
   const toggleQuestion = (id) => {
     setSelectedQuestions((s) =>
@@ -150,6 +163,7 @@ const CreateTest = () => {
         class: config.class,
         totalStudents: Number(config.totalStudents) || undefined,
         chapter: config.chapter,
+        questionSet: config.questionSet,
         questions: selectedQuestions,
         timeLimitMinutes: Number(config.timeLimitMinutes),
         availableFrom: availableFrom || undefined,
@@ -204,6 +218,18 @@ const CreateTest = () => {
             value={config.title}
             onChange={(e) => setConfig({ ...config, title: e.target.value })}
           />
+
+          <select
+            required
+            className="input-field"
+            value={config.questionSet}
+            onChange={(e) => setConfig({ ...config, questionSet: e.target.value })}
+          >
+            <option value="">Select Question Set Title</option>
+            {questionSets.map((set) => (
+              <option key={set._id} value={set._id}>{set.title} ({set.questionCount} questions)</option>
+            ))}
+          </select>
 
           <input
             placeholder="Subject"
@@ -352,7 +378,7 @@ const CreateTest = () => {
               <h2 className="font-semibold">
                 Select Questions ({selectedQuestions.length} of {questions.length} selected)
               </h2>
-              <p className="text-muted text-xs mt-1">Click a question to view it fully.</p>
+              <p className="text-muted text-xs mt-1">Choose a Question Set Title above, then click a question to view it fully.</p>
             </div>
             <label className="inline-flex items-center gap-2 text-sm text-muted">
               <input
@@ -385,7 +411,7 @@ const CreateTest = () => {
             ))}
 
             {questions.length === 0 && (
-              <p className="text-muted text-sm">No questions in your bank yet - add some first.</p>
+              <p className="text-muted text-sm">{config.questionSet ? 'No questions in this Question Set yet.' : 'Select a Question Set Title to view its questions.'}</p>
             )}
           </div>
         </div>

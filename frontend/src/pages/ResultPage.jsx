@@ -13,6 +13,8 @@ const ResultPage = () => {
   const navigate = useNavigate();
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [downloading, setDownloading] = useState(false);
+  const [reviewFilter, setReviewFilter] = useState('all');
 
   useEffect(() => {
     api.get(`/tests/${id}/result`)
@@ -25,6 +27,28 @@ const ResultPage = () => {
 
   const { test, attempt, detailedAnswers, strongChapters, weakChapters } = result;
   const line = motivationalLines[Math.floor(Math.random() * motivationalLines.length)];
+  const visibleAnswers = detailedAnswers
+    .map((answer, index) => ({ answer, index }))
+    .filter(({ answer }) => reviewFilter === 'all' || (reviewFilter === 'correct' ? answer.isCorrect : !answer.isCorrect));
+
+  const downloadReport = async () => {
+    try {
+      setDownloading(true);
+      const response = await api.get(`/tests/${id}/report/pdf`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${test.title.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'test'}-revision-report.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not download the revision report');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
@@ -35,6 +59,9 @@ const ResultPage = () => {
         <p className="font-display font-extrabold text-5xl my-3 text-accent">{attempt.percentage}%</p>
         <p className="text-muted">{attempt.score} / {test.totalMarks} marks</p>
         <p className="text-sm mt-4 text-white/80">{line}</p>
+        <button className="btn-accent mt-5 text-sm" onClick={downloadReport} disabled={downloading}>
+          {downloading ? 'Preparing report...' : 'Download PDF Report'}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5 mb-8">
@@ -56,9 +83,19 @@ const ResultPage = () => {
 
       {test.showAnswersAfterSubmission && (
         <div className="card p-4 sm:p-6">
-          <h3 className="font-semibold mb-4">Answer Review</h3>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+            <h3 className="font-semibold">Answer Review</h3>
+            <div className="flex gap-2 text-xs">
+              {[['all', 'All'], ['review', 'To revise'], ['correct', 'Correct']].map(([value, label]) => (
+                <button key={value} onClick={() => setReviewFilter(value)}
+                  className={`rounded-full px-3 py-1.5 border ${reviewFilter === value ? 'border-accent bg-accent/10 text-accent' : 'border-white/10 text-muted'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="space-y-4">
-            {detailedAnswers.map((a, i) => (
+            {visibleAnswers.map(({ answer: a, index: i }) => (
               <div key={i} className="border-b border-white/5 pb-4 last:border-0">
                 <p className="text-sm mb-1">{i + 1}. {a.questionText}</p>
                 <p className="text-xs text-muted">

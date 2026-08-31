@@ -3,6 +3,7 @@ import Sidebar from '../components/Sidebar.jsx';
 import api from '../api/axios.js';
 
 const emptyQuestion = {
+  questionSet: '',
   type: 'mcq',
   subject: '',
   chapter: '',
@@ -22,6 +23,9 @@ const prepareQuestionForm = (question) => ({
 
 const QuestionBank = () => {
   const [questions, setQuestions] = useState([]);
+  const [questionSets, setQuestionSets] = useState([]);
+  const [ungroupedQuestionCount, setUngroupedQuestionCount] = useState(0);
+  const [activeSet, setActiveSet] = useState(null);
   const [filters, setFilters] = useState({ subject: '', chapter: '', type: '', search: '' });
   const [selected, setSelected] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
@@ -30,6 +34,8 @@ const QuestionBank = () => {
   const [form, setForm] = useState(emptyQuestion);
   const [pasteMode, setPasteMode] = useState(false);
   const [rawText, setRawText] = useState('');
+  const [setModal, setSetModal] = useState(null);
+  const [setTitle, setSetTitle] = useState('');
   const [error, setError] = useState('');
 
   const allQuestionIds = useMemo(() => questions.map((question) => question._id), [questions]);
@@ -38,6 +44,7 @@ const QuestionBank = () => {
   const load = async () => {
     try {
       const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
+      if (activeSet?._id) params.questionSet = activeSet._id;
       const { data } = await api.get('/questions', { params });
       setQuestions(data.questions);
       setSelected((current) => current.filter((id) => data.questions.some((question) => question._id === id)));
@@ -46,7 +53,19 @@ const QuestionBank = () => {
     }
   };
 
-  useEffect(() => { load(); }, [filters]);
+  const loadSets = async () => {
+    try {
+      const { data } = await api.get('/questions/sets');
+      setQuestionSets(data.questionSets);
+      setUngroupedQuestionCount(data.ungroupedQuestionCount || 0);
+      setActiveSet((current) => current ? data.questionSets.find((set) => set._id === current._id) || null : null);
+    } catch {
+      setError('Failed to load Question Sets');
+    }
+  };
+
+  useEffect(() => { load(); }, [filters, activeSet?._id]);
+  useEffect(() => { loadSets(); }, []);
 
   const toggleSelect = (id) =>
     setSelected((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
@@ -69,11 +88,43 @@ const QuestionBank = () => {
   };
 
   const openAddQuestion = () => {
-    setForm(emptyQuestion);
+    if (!activeSet) return setError('Open a Question Set before adding questions.');
+    setForm({ ...emptyQuestion, questionSet: activeSet._id });
     setActiveQuestion(null);
     setIsEditing(true);
     setShowAdd(true);
     setError('');
+  };
+
+  const saveQuestionSet = async (e) => {
+    e.preventDefault();
+    try {
+      const { data } = setModal?.questionSet
+        ? await api.put(`/questions/sets/${setModal.questionSet._id}`, { title: setTitle })
+        : await api.post('/questions/sets', { title: setTitle });
+      const saved = data.questionSet;
+      if (setModal?.moveSelected) {
+        await api.patch('/questions/assign-set', { ids: selected, questionSet: saved._id });
+        setSelected([]);
+      }
+      setSetModal(null);
+      setSetTitle('');
+      await loadSets();
+      if (!setModal?.questionSet) setActiveSet(saved);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to save Question Set');
+    }
+  };
+
+  const removeQuestionSet = async (questionSet) => {
+    if (!window.confirm(`Delete “${questionSet.title}”? Its questions will be kept, but no longer grouped.`)) return;
+    try {
+      const { data } = await api.delete(`/questions/sets/${questionSet._id}`);
+      setActiveSet(null);
+      await Promise.all([loadSets(), load()]);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to delete Question Set');
+    }
   };
 
   const handleBulkDelete = async () => {
@@ -116,6 +167,7 @@ const QuestionBank = () => {
         setForm(emptyQuestion);
       }
       load();
+      loadSets();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save question');
     }
@@ -125,11 +177,12 @@ const QuestionBank = () => {
     try {
       const { data } = await api.post('/questions/parse-pasted', { rawText });
       for (const q of data.questions) {
-        await api.post('/questions', { ...q, subject: filters.subject || 'General', chapter: filters.chapter || 'General', difficulty: 'medium' });
+        await api.post('/questions', { ...q, questionSet: activeSet?._id, subject: filters.subject || 'General', chapter: filters.chapter || 'General', difficulty: 'medium' });
       }
       setPasteMode(false);
       setRawText('');
       load();
+      loadSets();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to parse pasted questions');
     }
@@ -146,6 +199,10 @@ const QuestionBank = () => {
         value={form.questionText}
         onChange={(e) => setForm({ ...form, questionText: e.target.value })}
       />
+      <select required className="input-field" value={form.questionSet} onChange={(e) => setForm({ ...form, questionSet: e.target.value })}>
+        <option value="">Select Test Title / Question Set</option>
+        {questionSets.map((set) => <option key={set._id} value={set._id}>{set.title}</option>)}
+      </select>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <input required placeholder="Subject" className="input-field" value={form.subject}
           onChange={(e) => setForm({ ...form, subject: e.target.value })} />
@@ -223,15 +280,51 @@ const QuestionBank = () => {
       <Sidebar />
       <main className="teacher-main">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
-          <h1 className="font-display font-bold text-2xl">Question Bank</h1>
+          <div>
+            <h1 className="font-display font-bold text-2xl">Question Bank</h1>
+            {activeSet && <p className="text-muted text-sm mt-1">{activeSet.title} · {activeSet.questionCount} question(s)</p>}
+          </div>
           <div className="grid grid-cols-2 gap-3 sm:flex">
-            <button className="btn-ghost" onClick={() => setPasteMode(true)}>Paste Questions</button>
-            <button className="btn-accent" onClick={openAddQuestion}>+ Add Question</button>
+            {!activeSet ? (
+              <button className="btn-accent" onClick={() => { setSetTitle(''); setSetModal({}); }}>+ New Question Set</button>
+            ) : activeSet._id === 'ungrouped' ? null : (
+              <>
+                <button className="btn-ghost" onClick={() => setPasteMode(true)}>Paste Questions</button>
+                <button className="btn-accent" onClick={openAddQuestion}>+ Add Question</button>
+              </>
+            )}
           </div>
         </div>
 
         {error && <p className="text-danger text-sm mb-4">{error}</p>}
 
+        {!activeSet ? (
+          <div className="space-y-3">
+            {questionSets.map((set) => (
+              <div key={set._id} className="card p-4 flex items-center gap-3">
+                <button type="button" className="flex-1 text-left" onClick={() => { setActiveSet(set); setSelected([]); }}>
+                  <p className="font-semibold">{set.title}</p>
+                  <p className="text-muted text-sm mt-1">{set.questionCount} question(s)</p>
+                </button>
+                <button className="btn-ghost text-sm" onClick={() => { setSetTitle(set.title); setSetModal({ questionSet: set }); }}>Edit</button>
+                <button className="btn-ghost text-danger text-sm" onClick={() => removeQuestionSet(set)}>Delete</button>
+              </div>
+            ))}
+            {ungroupedQuestionCount > 0 && (
+              <div className="card p-4 flex items-center gap-3">
+                <button type="button" className="flex-1 text-left" onClick={() => { setActiveSet({ _id: 'ungrouped', title: 'Ungrouped Questions', questionCount: ungroupedQuestionCount }); setSelected([]); }}>
+                  <p className="font-semibold">Ungrouped Questions</p>
+                  <p className="text-muted text-sm mt-1">{ungroupedQuestionCount} question(s) created before Question Sets</p>
+                </button>
+              </div>
+            )}
+            {questionSets.length === 0 && <p className="text-muted text-sm">Create a Question Set (Test Title) to start organising questions.</p>}
+          </div>
+        ) : <>
+        <div className="flex items-center justify-between mb-4">
+          <button className="btn-ghost text-sm" onClick={() => { setActiveSet(null); setSelected([]); }}>← All Question Sets</button>
+          {activeSet._id !== 'ungrouped' && <div className="flex gap-2"><button className="btn-ghost text-sm" onClick={() => { setSetTitle(activeSet.title); setSetModal({ questionSet: activeSet }); }}>Edit Title</button><button className="btn-ghost text-danger text-sm" onClick={() => removeQuestionSet(activeSet)}>Delete Set</button></div>}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <input placeholder="Subject" className="input-field" value={filters.subject}
             onChange={(e) => setFilters({ ...filters, subject: e.target.value })} />
@@ -257,6 +350,11 @@ const QuestionBank = () => {
           {selected.length > 0 && (
             <div className="flex items-center gap-3">
               <span className="text-muted text-sm">{selected.length} selected</span>
+              {activeSet._id === 'ungrouped' && (
+                <button className="btn-accent text-sm" onClick={() => { setSetTitle(''); setSetModal({ moveSelected: true }); }}>
+                  Create Set from Selected
+                </button>
+              )}
               <button className="btn-ghost text-danger text-sm" onClick={handleBulkDelete}>Bulk Delete</button>
             </div>
           )}
@@ -279,6 +377,7 @@ const QuestionBank = () => {
           ))}
           {questions.length === 0 && <p className="text-muted text-sm">No questions match these filters yet.</p>}
         </div>
+        </>}
 
         {showAdd && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -326,6 +425,7 @@ const QuestionBank = () => {
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
             <div className="card p-6 w-full max-w-lg space-y-3">
               <h3 className="font-semibold text-lg">Paste Questions</h3>
+              <p className="text-sm"><span className="text-muted">Test Title:</span> {activeSet?.title}</p>
               <p className="text-muted text-sm">Paste questions (from ChatGPT or elsewhere). Separate each question with a blank line.</p>
               <textarea rows={10} className="input-field" value={rawText} onChange={(e) => setRawText(e.target.value)}
                 placeholder={'1) What is Newton\'s second law?\nA)F=ma\nB)E=mc^2\nAnswer: A)F=ma'} />
@@ -334,6 +434,17 @@ const QuestionBank = () => {
                 <button className="btn-accent flex-1" onClick={handleParsePasted}>Import</button>
               </div>
             </div>
+          </div>
+        )}
+
+        {setModal && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <form onSubmit={saveQuestionSet} className="card p-6 w-full max-w-md space-y-4">
+              <h3 className="font-semibold text-lg">{setModal.questionSet ? 'Edit Question Set' : setModal.moveSelected ? 'Create Set from Selected Questions' : 'New Question Set'}</h3>
+              <p className="text-muted text-sm">{setModal.moveSelected ? `${selected.length} selected question(s) will be moved into this Test Title.` : 'Use a Test Title to group questions, such as “Unit Test 1” or “Revision Test”.'}</p>
+              <input autoFocus required placeholder="Test Title" className="input-field" value={setTitle} onChange={(e) => setSetTitle(e.target.value)} />
+              <div className="flex gap-3"><button type="button" className="btn-ghost flex-1" onClick={() => setSetModal(null)}>Cancel</button><button className="btn-accent flex-1">Save</button></div>
+            </form>
           </div>
         )}
       </main>
