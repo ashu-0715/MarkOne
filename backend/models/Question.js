@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 const questionSchema = new mongoose.Schema(
   {
     teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', required: true, index: true },
+    // Optional for legacy questions created before question sets were introduced.
+    questionSet: { type: mongoose.Schema.Types.ObjectId, ref: 'QuestionSet', index: true },
     type: {
       type: String,
       enum: ['mcq', 'true_false', 'fill_blank', 'assertion_reason'],
@@ -28,5 +30,6 @@ const questionSchema = new mongoose.Schema(
 );
 
 questionSchema.index({ teacher: 1, subject: 1, chapter: 1, difficulty: 1 });
+questionSchema.index({ teacher: 1, questionSet: 1, createdAt: -1 });
 
 export default mongoose.model('Question', questionSchema);

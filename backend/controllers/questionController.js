@@ -1,8 +1,65 @@
 import crypto from 'crypto';
 import Question from '../models/Question.js';
+import QuestionSet from '../models/QuestionSet.js';
 import { generateQuestionsFromText, generateQuestionsFromPrompt } from '../services/aiService.js';
 
 const hashContent = (text) => crypto.createHash('sha256').update(text.trim().toLowerCase()).digest('hex');
+const normalizeTitle = (title) => title.trim().replace(/\s+/g, ' ').toLowerCase();
+
+export const getQuestionSets = async (req, res) => {
+  try {
+    const [questionSets, ungroupedQuestionCount] = await Promise.all([QuestionSet.aggregate([
+      { $match: { teacher: req.user._id } },
+      { $lookup: { from: 'questions', localField: '_id', foreignField: 'questionSet', as: 'questions' } },
+      { $project: { title: 1, createdAt: 1, updatedAt: 1, questionCount: { $size: '$questions' } } },
+      { $sort: { updatedAt: -1, title: 1 } },
+    ]), Question.countDocuments({ teacher: req.user._id, questionSet: { $exists: false } })]);
+    res.json({ questionSets, ungroupedQuestionCount });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch question sets', error: err.message });
+  }
+};
+
+export const createQuestionSet = async (req, res) => {
+  try {
+    const title = req.body.title?.trim();
+    if (!title) return res.status(400).json({ message: 'Test Title is required' });
+    const questionSet = await QuestionSet.create({ teacher: req.user._id, title, normalizedTitle: normalizeTitle(title) });
+    res.status(201).json({ questionSet });
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ message: 'A Question Set with this title already exists' });
+    res.status(500).json({ message: 'Failed to create Question Set', error: err.message });
+  }
+};
+
+export const updateQuestionSet = async (req, res) => {
+  try {
+    const title = req.body.title?.trim();
+    if (!title) return res.status(400).json({ message: 'Test Title is required' });
+    const questionSet = await QuestionSet.findOneAndUpdate(
+      { _id: req.params.id, teacher: req.user._id },
+      { title, normalizedTitle: normalizeTitle(title) },
+      { new: true, runValidators: true }
+    );
+    if (!questionSet) return res.status(404).json({ message: 'Question Set not found' });
+    res.json({ questionSet });
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ message: 'A Question Set with this title already exists' });
+    res.status(500).json({ message: 'Failed to update Question Set', error: err.message });
+  }
+};
+
+export const deleteQuestionSet = async (req, res) => {
+  try {
+    const questionSet = await QuestionSet.findOneAndDelete({ _id: req.params.id, teacher: req.user._id });
+    if (!questionSet) return res.status(404).json({ message: 'Question Set not found' });
+    // Keep questions (and any existing tests that reference them) safe; they become ungrouped.
+    await Question.updateMany({ teacher: req.user._id, questionSet: questionSet._id }, { $unset: { questionSet: 1 } });
+    res.json({ message: 'Question Set deleted. Its questions were kept in your Question Bank.' });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to delete Question Set', error: err.message });
+  }
+};
 
 export const createQuestion = async (req, res) => {
   try {
@@ -10,6 +67,10 @@ export const createQuestion = async (req, res) => {
   ...req.body,
   teacher: req.user._id,
 };
+
+    if (!payload.questionSet) return res.status(400).json({ message: 'Test Title is required' });
+    const questionSet = await QuestionSet.findOne({ _id: payload.questionSet, teacher: req.user._id });
+    if (!questionSet) return res.status(400).json({ message: 'Selected Question Set was not found' });
 
 // Normalize correct answer
 if (payload.correctAnswer) {
@@ -35,6 +96,11 @@ if (payload.correctAnswer) {
 export const updateQuestion = async (req, res) => {
   try {
     const payload = { ...req.body };
+
+    if (payload.questionSet) {
+      const questionSet = await QuestionSet.findOne({ _id: payload.questionSet, teacher: req.user._id });
+      if (!questionSet) return res.status(400).json({ message: 'Selected Question Set was not found' });
+    }
 
     if (payload.correctAnswer) {
       payload.correctAnswer = payload.correctAnswer
@@ -77,15 +143,35 @@ export const deleteQuestions = async (req, res) => {
   }
 };
 
+// Move selected legacy questions into a newly-created or existing Question Set.
+export const assignQuestionsToSet = async (req, res) => {
+  try {
+    const { ids, questionSet } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: 'Select at least one question' });
+    const set = await QuestionSet.findOne({ _id: questionSet, teacher: req.user._id });
+    if (!set) return res.status(404).json({ message: 'Question Set not found' });
+
+    const result = await Question.updateMany(
+      { _id: { $in: ids }, teacher: req.user._id, questionSet: { $exists: false } },
+      { $set: { questionSet: set._id } }
+    );
+    res.json({ message: `${result.modifiedCount} question(s) added to ${set.title}`, movedCount: result.modifiedCount });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to group questions', error: err.message });
+  }
+};
+
 // Search/filter the bank: by subject, chapter, difficulty, type, keyword
 export const getQuestionBank = async (req, res) => {
   try {
-    const { subject, chapter, difficulty, type, search, page = 1, limit = 25 } = req.query;
+    const { subject, chapter, difficulty, type, search, questionSet, page = 1, limit = 25 } = req.query;
     const filter = { teacher: req.user._id };
     if (subject) filter.subject = subject;
     if (chapter) filter.chapter = chapter;
     if (difficulty) filter.difficulty = difficulty;
     if (type) filter.type = type;
+    if (questionSet === 'ungrouped') filter.questionSet = { $exists: false };
+    else if (questionSet) filter.questionSet = questionSet;
     if (search) filter.questionText = { $regex: search, $options: 'i' };
 
     const [questions, total] = await Promise.all([

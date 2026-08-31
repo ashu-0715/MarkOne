@@ -2,6 +2,7 @@ import Test from '../models/Test.js';
 import Question from '../models/Question.js';
 import TestAttempt from '../models/TestAttempt.js';
 import Class from '../models/Class.js';
+import QuestionSet from '../models/QuestionSet.js';
 import PDFDocument from 'pdfkit';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +42,11 @@ export const createTest = async (req, res) => {
     const payload = { ...req.body, teacher: req.user._id };
     const classInfo = await Class.findOne({ _id: payload.class, teacher: req.user._id, isActive: true });
     if (!classInfo) return res.status(404).json({ message: 'Active class not found' });
+    if (!payload.questionSet) return res.status(400).json({ message: 'Select a Question Set Title' });
+    if (payload.questionSet) {
+      const questionSet = await QuestionSet.findOne({ _id: payload.questionSet, teacher: req.user._id });
+      if (!questionSet) return res.status(400).json({ message: 'Selected Question Set was not found' });
+    }
     if (payload.availableFrom) payload.availableFrom = new Date(payload.availableFrom);
     if (payload.availableUntil) payload.availableUntil = new Date(payload.availableUntil);
     if (payload.availableFrom && Number.isNaN(payload.availableFrom.getTime())) {
@@ -54,6 +60,10 @@ export const createTest = async (req, res) => {
     }
     payload.totalStudents = Math.max(Number(payload.totalStudents) || 0, 0);
     const questions = await Question.find({ _id: { $in: payload.questions }, teacher: req.user._id });
+    if (questions.length !== payload.questions.length) return res.status(400).json({ message: 'One or more selected questions were not found' });
+    if (payload.questionSet && questions.some((question) => question.questionSet?.toString() !== payload.questionSet)) {
+      return res.status(400).json({ message: 'All selected questions must belong to the chosen Question Set' });
+    }
     payload.totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
 
     const test = await Test.create(payload);

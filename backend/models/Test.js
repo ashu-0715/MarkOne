@@ -7,6 +7,7 @@ const testSchema = new mongoose.Schema(
     subject: { type: String, required: true },
     class: { type: mongoose.Schema.Types.ObjectId, ref: 'Class', required: true, index: true },
     chapter: { type: String },
+    questionSet: { type: mongoose.Schema.Types.ObjectId, ref: 'QuestionSet', index: true },
     questions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Question', required: true }],
     timeLimitMinutes: { type: Number, required: true },
     availableFrom: { type: Date },
