@@ -168,7 +168,7 @@ export const downloadMyAttemptReport = async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
-    const doc = new PDFDocument({ margin: 45, size: 'A4', bufferPages: true, info: { Title: `${test.title} Revision Report` } });
+    const doc = new PDFDocument({ margin: 36, size: 'A4', bufferPages: true, info: { Title: `${test.title} Revision Report` } });
     doc.pipe(res);
     doc.registerFont('Tamil', reportFontPath);
     doc.font('Tamil');
@@ -177,12 +177,11 @@ export const downloadMyAttemptReport = async (req, res) => {
     const contentX = doc.page.margins.left;
 
     doc.fillColor('#4f46e5').fontSize(9).text('MARKONE | PERSONAL REVISION REPORT', { align: 'center' });
-    doc.moveDown(0.35);
-    doc.fillColor('#172554').fontSize(21).text(test.title, { align: 'center' });
-    doc.moveDown(0.5);
-    doc.fontSize(10).fillColor('#475569').text(`Student: ${req.user.name} | Roll no.: ${req.user.rollNumber}`, { align: 'center' });
-    doc.text(`Submitted: ${attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString() : 'Not available'}`, { align: 'center' });
-    doc.moveDown();
+    doc.moveDown(0.2);
+    doc.fillColor('#172554').fontSize(18).text(test.title, { align: 'center' });
+    doc.moveDown(0.25);
+    doc.fontSize(9).fillColor('#475569').text(`Student: ${req.user.name} | Roll no.: ${req.user.rollNumber} | Submitted: ${attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString() : 'Not available'}`, { align: 'center' });
+    doc.moveDown(0.65);
 
     const summaryGap = 9;
     const summaryWidth = (contentWidth - summaryGap * 2) / 3;
@@ -194,15 +193,15 @@ export const downloadMyAttemptReport = async (req, res) => {
     ];
     summaryCards.forEach((card, index) => {
       const x = contentX + index * (summaryWidth + summaryGap);
-      doc.roundedRect(x, summaryY, summaryWidth, 60, 8).fill(card.background);
-      doc.fillColor(card.color).fontSize(8).text(card.label, x + 12, summaryY + 12, { width: summaryWidth - 24, align: 'center' });
-      doc.fontSize(13).text(card.value, x + 12, summaryY + 30, { width: summaryWidth - 24, align: 'center' });
+      doc.roundedRect(x, summaryY, summaryWidth, 48, 7).fill(card.background);
+      doc.fillColor(card.color).fontSize(7).text(card.label, x + 8, summaryY + 8, { width: summaryWidth - 16, align: 'center' });
+      doc.fontSize(11).text(card.value, x + 8, summaryY + 24, { width: summaryWidth - 16, align: 'center' });
     });
-    doc.y = summaryY + 80;
+    doc.y = summaryY + 59;
 
     doc.fillColor('#1e293b').fontSize(15).text('Question review');
-    doc.fillColor('#64748b').fontSize(9).text('Review the amber and red cards first, then use the explanations to revise.');
-    doc.moveDown(0.8);
+    doc.fillColor('#64748b').fontSize(8).text('Review missed questions and revision notes.');
+    doc.moveDown(0.5);
 
     test.questions.forEach((question, index) => {
       const answer = answersByQuestion.get(question._id.toString());
@@ -218,31 +217,31 @@ export const downloadMyAttemptReport = async (req, res) => {
       const explanationHeight = question.explanation
         ? doc.heightOfString(`Why: ${question.explanation}`, { width: textWidth })
         : 0;
-      const cardHeight = 84 + questionHeight + answerHeight + (question.explanation ? 17 + explanationHeight : 0);
+      const cardHeight = 64 + questionHeight + answerHeight + (question.explanation ? 14 + explanationHeight : 0);
       if (doc.y + cardHeight > doc.page.height - doc.page.margins.bottom - 25) startReviewPage(doc, true);
 
       const cardY = doc.y;
-      doc.roundedRect(contentX, cardY, contentWidth, cardHeight, 9).fill('#ffffff').strokeColor('#e2e8f0').stroke();
+      doc.roundedRect(contentX, cardY, contentWidth, cardHeight, 7).fill('#ffffff').strokeColor('#e2e8f0').stroke();
       doc.roundedRect(contentX, cardY, 6, cardHeight, 4).fill(statusColor);
-      doc.roundedRect(contentX + 18, cardY + 14, 70, 20, 10).fill(statusBackground);
-      doc.fillColor(statusColor).fontSize(8).text(status.toUpperCase(), contentX + 21, cardY + 20, { width: 64, align: 'center' });
-      doc.fillColor('#0f172a').fontSize(12).text(`${index + 1}. ${question.questionText}`, contentX + 18, cardY + 44, { width: textWidth });
+      doc.roundedRect(contentX + 16, cardY + 10, 66, 17, 8).fill(statusBackground);
+      doc.fillColor(statusColor).fontSize(7).text(status.toUpperCase(), contentX + 18, cardY + 15, { width: 62, align: 'center' });
+      doc.fillColor('#0f172a').fontSize(11).text(`${index + 1}. ${question.questionText}`, contentX + 16, cardY + 33, { width: textWidth });
 
-      let lineY = cardY + 50 + questionHeight;
-      doc.fillColor('#64748b').fontSize(8).text('YOUR ANSWER', contentX + 18, lineY);
-      lineY += 12;
-      doc.fillColor(answer?.isCorrect ? '#15803d' : '#334155').fontSize(10).text(answer?.givenAnswer || 'Skipped', contentX + 18, lineY, { width: textWidth });
-      lineY += doc.heightOfString(answer?.givenAnswer || 'Skipped', { width: textWidth }) + 5;
-      doc.fillColor('#64748b').fontSize(8).text('CORRECT ANSWER', contentX + 18, lineY);
-      lineY += 12;
-      doc.fillColor('#15803d').fontSize(10).text(question.correctAnswer || 'Not available', contentX + 18, lineY, { width: textWidth });
-      lineY += doc.heightOfString(question.correctAnswer || 'Not available', { width: textWidth }) + 5;
+      let lineY = cardY + 38 + questionHeight;
+      doc.fillColor('#64748b').fontSize(7).text('YOUR ANSWER', contentX + 16, lineY);
+      lineY += 10;
+      doc.fillColor(answer?.isCorrect ? '#15803d' : '#334155').fontSize(9).text(answer?.givenAnswer || 'Skipped', contentX + 16, lineY, { width: textWidth });
+      lineY += doc.heightOfString(answer?.givenAnswer || 'Skipped', { width: textWidth, fontSize: 9 }) + 3;
+      doc.fillColor('#64748b').fontSize(7).text('CORRECT ANSWER', contentX + 16, lineY);
+      lineY += 10;
+      doc.fillColor('#15803d').fontSize(9).text(question.correctAnswer || 'Not available', contentX + 16, lineY, { width: textWidth });
+      lineY += doc.heightOfString(question.correctAnswer || 'Not available', { width: textWidth, fontSize: 9 }) + 3;
       if (question.explanation) {
-        doc.fillColor('#64748b').fontSize(8).text('REVISION NOTE', contentX + 18, lineY);
-        lineY += 12;
-        doc.fillColor('#475569').fontSize(9).text(question.explanation, contentX + 18, lineY, { width: textWidth });
+        doc.fillColor('#64748b').fontSize(7).text('REVISION NOTE', contentX + 16, lineY);
+        lineY += 10;
+        doc.fillColor('#475569').fontSize(8).text(question.explanation, contentX + 16, lineY, { width: textWidth });
       }
-      doc.y = cardY + cardHeight + 10;
+      doc.y = cardY + cardHeight + 6;
     });
 
     const range = doc.bufferedPageRange();
@@ -251,7 +250,7 @@ export const downloadMyAttemptReport = async (req, res) => {
       doc.font('Tamil').fontSize(8).fillColor('#64748b').text(
         `Revision report | Page ${page + 1} of ${range.count}`,
         doc.page.margins.left,
-        doc.page.height - 70,
+        doc.page.height - 58,
         { align: 'center', width: doc.page.width - doc.page.margins.left - doc.page.margins.right }
       );
     }
