@@ -70,6 +70,50 @@ svg {
   padding: 0.9rem 1rem;
 }
 
+.create-test-error {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.72);
+  color: #f87171;
+  text-align: center;
+}
+
+.create-test-error p {
+  width: min(100%, 28rem);
+  padding: 1rem 1.25rem;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 1rem;
+  background: #1a1a1a;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+}
+
+.create-test-error-dismiss {
+  padding: 0.55rem 1.25rem;
+  border-radius: 0.75rem;
+  background: #292929;
+  color: #fff;
+}
+
+.question-bank-set-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.question-bank-set-management {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .teacher-sidebar {
   width: 16rem;
   flex-shrink: 0;
@@ -296,6 +340,29 @@ svg {
 
   .teacher-main .btn-accent,
   .teacher-main .btn-ghost {
+    width: 100%;
+  }
+
+  .question-bank-set-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .question-bank-back {
+    width: auto !important;
+    align-self: flex-start;
+    min-height: 2.4rem;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .question-bank-set-management {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .question-bank-set-management .btn-ghost {
     width: 100%;
   }
 

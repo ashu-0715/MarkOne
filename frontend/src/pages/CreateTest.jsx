@@ -203,7 +203,12 @@ const CreateTest = () => {
           <p className="text-muted text-sm mt-1">Build and publish a test for your selected class.</p>
         </div>
 
-        {error && <p className="text-danger text-sm mb-4">{error}</p>}
+        {error && (
+          <div className="create-test-error" role="alert" aria-live="assertive">
+            <p>{error}</p>
+            <button type="button" className="create-test-error-dismiss" onClick={() => setError('')}>Dismiss</button>
+          </div>
+        )}
         {message && (
           <div className="publish-toast" role="status" aria-live="polite">
             <p className="font-semibold">{message}</p>

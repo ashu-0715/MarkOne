@@ -321,9 +321,9 @@ const QuestionBank = () => {
             {questionSets.length === 0 && <p className="text-muted text-sm">Create a Question Set (Test Title) to start organising questions.</p>}
           </div>
         ) : <>
-        <div className="flex items-center justify-between mb-4">
-          <button className="btn-ghost text-sm" onClick={() => { setActiveSet(null); setSelected([]); }}>← All Question Sets</button>
-          {activeSet._id !== 'ungrouped' && <div className="flex gap-2"><button className="btn-ghost text-sm" onClick={() => { setSetTitle(activeSet.title); setSetModal({ questionSet: activeSet }); }}>Edit Title</button><button className="btn-ghost text-danger text-sm" onClick={() => removeQuestionSet(activeSet)}>Delete Set</button></div>}
+        <div className="question-bank-set-actions">
+          <button className="btn-ghost text-sm question-bank-back" onClick={() => { setActiveSet(null); setSelected([]); }}>← All Question Sets</button>
+          {activeSet._id !== 'ungrouped' && <div className="question-bank-set-management"><button className="btn-ghost text-sm" onClick={() => { setSetTitle(activeSet.title); setSetModal({ questionSet: activeSet }); }}>Edit Title</button><button className="btn-ghost text-danger text-sm" onClick={() => removeQuestionSet(activeSet)}>Delete Set</button></div>}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <input placeholder="Subject" className="input-field" value={filters.subject}
