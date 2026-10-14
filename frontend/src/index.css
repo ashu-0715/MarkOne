@@ -101,6 +101,25 @@ svg {
   color: #fff;
 }
 
+@media (hover: none) {
+  .footer-senior-prompt {
+    opacity: 1;
+    animation: footer-prompt-bounce 1s infinite;
+  }
+}
+
+@keyframes footer-prompt-bounce {
+  0%,
+  100% {
+    transform: translate(-50%, 0);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+  50% {
+    transform: translate(-50%, -25%);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+}
+
 .question-bank-set-actions {
   display: flex;
   align-items: center;

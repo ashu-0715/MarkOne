@@ -109,7 +109,7 @@ const LandingPage = () => {
               your senior😄
             </a>
             <span
-              className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-full border border-accent/30 bg-surface px-3 py-1.5 text-xs font-semibold text-accent shadow-lg opacity-0 transition duration-200 group-hover:animate-bounce group-hover:opacity-100 group-focus-within:animate-bounce group-focus-within:opacity-100"
+              className="footer-senior-prompt pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-full border border-accent/30 bg-surface px-3 py-1.5 text-xs font-semibold text-accent opacity-0 transition duration-200 group-hover:animate-bounce group-hover:opacity-100 group-focus-within:animate-bounce group-focus-within:opacity-100"
               aria-hidden="true"
             >
               Click here to know me 😋
