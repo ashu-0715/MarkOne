@@ -90,9 +90,33 @@ const LandingPage = () => {
         </div>
       </section>
 
-      <footer className="border-t border-white/5 py-8 text-center text-muted text-sm">
-        © {new Date().getFullYear()} Created by ASH - your senior😄.
-      </footer>
+      <motion.footer
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.6 }}
+        transition={{ duration: 0.55, ease: 'easeOut' }}
+        className="border-t border-white/5 py-8 text-center text-muted text-sm"
+      >
+        <p>
+          © {new Date().getFullYear()} Created by ASH -{' '}
+          <span className="group relative inline-block">
+            <a
+              href="https://www.linkedin.com/in/aswiniesakkimuthu"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block text-white underline decoration-accent/70 underline-offset-4 transition-colors hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+            >
+              your senior😄
+            </a>
+            <span
+              className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-full border border-accent/30 bg-surface px-3 py-1.5 text-xs font-semibold text-accent shadow-lg opacity-0 transition duration-200 group-hover:animate-bounce group-hover:opacity-100 group-focus-within:animate-bounce group-focus-within:opacity-100"
+              aria-hidden="true"
+            >
+              Click here to know me 😋
+            </span>
+          </span>.
+        </p>
+      </motion.footer>
 
       {showLoginChoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
