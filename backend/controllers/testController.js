@@ -291,6 +291,22 @@ export const getAvailableTestsForStudent = async (req, res) => {
   }
 };
 
+// Student-facing: show submitted results from all tests, including tests no longer available.
+export const getMyResultHistory = async (req, res) => {
+  try {
+    const attempts = await TestAttempt.find({
+      student: req.user._id,
+      status: { $ne: 'in_progress' },
+    })
+      .populate('test', 'title subject totalMarks')
+      .sort({ submittedAt: -1, createdAt: -1 });
+
+    res.json({ attempts });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch result history', error: err.message });
+  }
+};
+
 // Student-facing: fetch a published test for their class, with answers stripped
 export const getTestForStudent = async (req, res) => {
   try {
