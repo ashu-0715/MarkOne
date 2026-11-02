@@ -7,12 +7,16 @@ const StudentDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [tests, setTests] = useState([]);
+  const [resultHistory, setResultHistory] = useState([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.get('/tests/available')
-      .then((res) => setTests(res.data.tests))
-      .catch(() => setError('Could not load your tests'));
+    Promise.all([api.get('/tests/available'), api.get('/tests/history')])
+      .then(([testsRes, historyRes]) => {
+        setTests(testsRes.data.tests);
+        setResultHistory(historyRes.data.attempts);
+      })
+      .catch(() => setError('Could not load your tests and result history'));
   }, []);
 
   const upcoming = tests.filter((t) => !t.attempt);
@@ -71,6 +75,34 @@ const StudentDashboard = () => {
                   <p className="text-muted text-xs">{t.subject}</p>
                 </div>
                 <span className="text-accent font-semibold">{t.attempt.percentage}%</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card p-4 sm:p-6 mt-6">
+        <h2 className="font-semibold mb-4">Previous Test Results</h2>
+        {resultHistory.length === 0 ? (
+          <p className="text-muted text-sm">Your submitted test results will appear here.</p>
+        ) : (
+          <div className="space-y-3">
+            {resultHistory.map((attempt) => (
+              <div key={attempt._id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-surface rounded-xl px-4 py-3">
+                <div>
+                  <p className="font-medium">{attempt.test?.title || 'Test result'}</p>
+                  <p className="text-muted text-xs">
+                    {attempt.test?.subject || 'Subject unavailable'}
+                    {attempt.submittedAt ? ` · ${new Date(attempt.submittedAt).toLocaleDateString()}` : ''}
+                    {attempt.test?.totalMarks ? ` · ${attempt.score}/${attempt.test.totalMarks} marks` : ''}
+                  </p>
+                </div>
+                <div className="flex items-center justify-between gap-3 sm:justify-end">
+                  <span className="text-accent font-semibold">{attempt.percentage}%</span>
+                  {attempt.test?._id && (
+                    <button className="btn-ghost text-sm" onClick={() => navigate(`/student/result/${attempt.test._id}`)}>View Result</button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
