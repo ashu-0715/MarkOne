@@ -84,14 +84,18 @@ const TeacherReports = () => {
 
   const visibleStudentReports = useMemo(() => {
     if (!report) return [];
-    if (!selectedTestId) return report.students;
+    const students = selectedTestId
+      ? report.students
+        .map((studentReport) => ({
+          ...studentReport,
+          attempts: studentReport.attempts.filter((attempt) => getId(attempt.testId) === selectedTestId),
+        }))
+        .filter((studentReport) => studentReport.attempts.length > 0)
+      : report.students;
 
-    return report.students
-      .map((studentReport) => ({
-        ...studentReport,
-        attempts: studentReport.attempts.filter((attempt) => getId(attempt.testId) === selectedTestId),
-      }))
-      .filter((studentReport) => studentReport.attempts.length > 0);
+    return [...students].sort((a, b) =>
+      (a.student?.name || '').localeCompare(b.student?.name || '', undefined, { sensitivity: 'base' })
+    );
   }, [report, selectedTestId]);
 
   const visibleAttemptCount = visibleStudentReports.reduce(
