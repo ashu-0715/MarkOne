@@ -385,6 +385,23 @@ svg {
     width: 100%;
   }
 
+  .question-bank-set-card {
+    gap: 0.5rem;
+    padding: 0.875rem;
+  }
+
+  .question-bank-set-title {
+    min-width: 0;
+  }
+
+  .question-bank-set-button {
+    flex: 0 0 auto;
+    width: auto !important;
+    min-height: 2.25rem;
+    padding: 0.45rem 0.65rem;
+    font-size: 0.8rem;
+  }
+
   .dashboard-stats .card {
     padding: 1rem;
   }

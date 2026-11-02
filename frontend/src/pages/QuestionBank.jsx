@@ -301,13 +301,13 @@ const QuestionBank = () => {
         {!activeSet ? (
           <div className="space-y-3">
             {questionSets.map((set) => (
-              <div key={set._id} className="card p-4 flex items-center gap-3">
-                <button type="button" className="flex-1 text-left" onClick={() => { setActiveSet(set); setSelected([]); }}>
-                  <p className="font-semibold">{set.title}</p>
+              <div key={set._id} className="question-bank-set-card card p-4 flex items-center gap-3">
+                <button type="button" className="question-bank-set-title flex-1 text-left" onClick={() => { setActiveSet(set); setSelected([]); }}>
+                  <p className="font-semibold truncate">{set.title}</p>
                   <p className="text-muted text-sm mt-1">{set.questionCount} question(s)</p>
                 </button>
-                <button className="btn-ghost text-sm" onClick={() => { setSetTitle(set.title); setSetModal({ questionSet: set }); }}>Edit</button>
-                <button className="btn-ghost text-danger text-sm" onClick={() => removeQuestionSet(set)}>Delete</button>
+                <button className="question-bank-set-button btn-ghost text-sm" onClick={() => { setSetTitle(set.title); setSetModal({ questionSet: set }); }}>Edit</button>
+                <button className="question-bank-set-button btn-ghost text-danger text-sm" onClick={() => removeQuestionSet(set)}>Delete</button>
               </div>
             ))}
             {ungroupedQuestionCount > 0 && (
