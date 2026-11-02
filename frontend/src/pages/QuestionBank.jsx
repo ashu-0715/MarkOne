@@ -177,7 +177,7 @@ const QuestionBank = () => {
     try {
       const { data } = await api.post('/questions/parse-pasted', { rawText });
       for (const q of data.questions) {
-        await api.post('/questions', { ...q, questionSet: activeSet?._id, subject: filters.subject || 'General', chapter: filters.chapter || 'General', difficulty: 'medium' });
+        await api.post('/questions', { ...q, allowSimilarQuestions: true, questionSet: activeSet?._id, subject: filters.subject || 'General', chapter: filters.chapter || 'General', difficulty: 'medium' });
       }
       setPasteMode(false);
       setRawText('');
