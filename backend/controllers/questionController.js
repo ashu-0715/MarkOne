@@ -63,8 +63,9 @@ export const deleteQuestionSet = async (req, res) => {
 
 export const createQuestion = async (req, res) => {
   try {
+    const { allowSimilarQuestions = false, ...questionData } = req.body;
     const payload = {
-  ...req.body,
+  ...questionData,
   teacher: req.user._id,
 };
 
@@ -81,9 +82,11 @@ if (payload.correctAnswer) {
 }
     payload.contentHash = hashContent(payload.questionText);
 
-    const duplicate = await Question.findOne({ teacher: req.user._id, contentHash: payload.contentHash });
-    if (duplicate) {
-      return res.status(409).json({ message: 'A very similar question already exists in your bank', duplicate });
+    if (!allowSimilarQuestions) {
+      const duplicate = await Question.findOne({ teacher: req.user._id, contentHash: payload.contentHash });
+      if (duplicate) {
+        return res.status(409).json({ message: 'A very similar question already exists in your bank', duplicate });
+      }
     }
 
     const question = await Question.create(payload);
