@@ -18,7 +18,7 @@ const features = [
 ];
 const steps = [
   { title: 'Create your class', desc: 'Teachers log in with an approved admin ID and share a class code with students.' },
-  { title: 'Generate a test', desc: 'Paste a lesson, upload a PDF, or just type a prompt — AI builds the questions.' },
+  { title: 'Generate a test', desc: 'Paste your questions, organize them into question sets, and create tests by selecting the question sets you need.' },
   { title: 'Review results', desc: 'See class and student-level reports the second results are in.' },
 ];
 
@@ -39,6 +39,14 @@ const LandingPage = () => {
       </nav>
 
       <section className="max-w-5xl mx-auto text-center px-6 pt-20 pb-24">
+        <motion.p
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="text-accent font-display font-bold tracking-[0.18em] text-sm md:text-base mb-5"
+        >
+          ONE SUN, ONE MOON, ONE MARK🌟
+        </motion.p>
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
