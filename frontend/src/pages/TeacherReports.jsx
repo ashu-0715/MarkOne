@@ -40,23 +40,43 @@ const TeacherReports = () => {
       return;
     }
 
-    const loadReport = async () => {
+    let isCurrent = true;
+    let requestInFlight = false;
+    const loadReport = async (quiet = false) => {
+      if (requestInFlight) return;
+      requestInFlight = true;
       try {
-        setLoadingReport(true);
-        setError('');
+        if (!quiet) {
+          setLoadingReport(true);
+          setError('');
+        }
         const res = await api.get(`/reports/class/${selectedClassId}`, {
           params: selectedTestId ? { testId: selectedTestId } : {},
         });
+        if (!isCurrent) return;
         setReport(res.data.analysis);
-        setExpandedStudentId('');
       } catch (err) {
-        setError(err.response?.data?.message || 'Could not load report');
+        if (isCurrent) setError(err.response?.data?.message || 'Could not load report');
       } finally {
-        setLoadingReport(false);
+        requestInFlight = false;
+        if (isCurrent && !quiet) setLoadingReport(false);
       }
     };
 
     loadReport();
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') loadReport(true);
+    };
+    const refreshTimer = window.setInterval(refreshWhenVisible, 15000);
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      isCurrent = false;
+      window.clearInterval(refreshTimer);
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, [selectedClassId, selectedTestId]);
 
   const selectedClass = useMemo(
@@ -93,7 +113,11 @@ const TeacherReports = () => {
       : report.students;
 
     return [...students].sort((a, b) =>
-      (a.student?.name || '').localeCompare(b.student?.name || '', undefined, { sensitivity: 'base' })
+      String(a.student?.rollNumber || '').localeCompare(
+        String(b.student?.rollNumber || ''),
+        undefined,
+        { numeric: true, sensitivity: 'base' }
+      ) || (a.student?.name || '').localeCompare(b.student?.name || '', undefined, { sensitivity: 'base' })
     );
   }, [report, selectedTestId]);
 
@@ -238,9 +262,9 @@ const TeacherReports = () => {
                         </div>
                         <div className="flex flex-wrap gap-2 text-xs">
                           <span className="rounded-full bg-card px-3 py-1 text-accent">{getMarksSummary(studentReport)}</span>
-                          {selectedTestId && <span className="rounded-full bg-card px-3 py-1 text-white/80">
-                            {studentReport.attempts.length ? 'Attended' : 'Not attempted'}
-                          </span>}
+                          {selectedTestId && studentReport.attempts.length === 0 && (
+                            <span className="rounded-full bg-card px-3 py-1 text-white/80">Not attempted</span>
+                          )}
                           <span className="rounded-full bg-card px-3 py-1 text-white/80">{isExpanded ? 'Hide analysis' : 'View analysis'}</span>
                         </div>
                       </button>
