@@ -98,6 +98,11 @@ const buildClassAnalysis = async (classId, teacherId, filters = {}, includeTestA
       .sort({ rollNumber: 1, name: 1 }),
     Test.find({ class: classId, teacher: teacherId }).select('_id title subject totalMarks totalStudents').sort({ createdAt: -1 }),
   ]);
+  students.sort((a, b) => String(a.rollNumber || '').localeCompare(
+    String(b.rollNumber || ''),
+    undefined,
+    { numeric: true, sensitivity: 'base' }
+  ) || String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
 
   const tests = testId
     ? allTests.filter((test) => test._id.toString() === testId)
