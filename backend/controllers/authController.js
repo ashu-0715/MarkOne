@@ -183,28 +183,30 @@ export const joinAsStudent = async (req, res) => {
     const alreadyJoinedToClass = student.joinedAt
       && student.class?.toString() === classDoc._id.toString()
       && student.teacher?.toString() === classDoc.teacher.toString();
-    if (student.joinedAt && !alreadyJoinedToClass && !isTestAccount) {
-      return res.status(409).json({ message: 'This student is already joined to another class' });
-    }
 
     if (!alreadyJoinedToClass) {
+      const previousClassId = student.class;
+      const hadPreviousOfficialClass = !isTestAccount && Boolean(student.joinedAt && previousClassId);
       const update = { class: classDoc._id, teacher: classDoc.teacher, rollNumber: student.registerNumber };
       if (!student.joinedAt) update.joinedAt = new Date();
       const joinedStudent = await Student.findOneAndUpdate(
-        isTestAccount ? { _id: student._id } : { _id: student._id, joinedAt: null },
+        { _id: student._id },
         { $set: update },
         { new: true }
       );
       if (joinedStudent) {
-        if (!isTestAccount && !student.joinedAt) {
+        if (hadPreviousOfficialClass && previousClassId.toString() !== classDoc._id.toString()) {
+          await ClassModel.updateOne(
+            { _id: previousClassId, studentCount: { $gt: 0 } },
+            { $inc: { studentCount: -1 } }
+          );
+        }
+        if (!isTestAccount && (!hadPreviousOfficialClass || previousClassId.toString() !== classDoc._id.toString())) {
           await ClassModel.updateOne({ _id: classDoc._id }, { $inc: { studentCount: 1 } });
         }
         Object.assign(student, joinedStudent.toObject());
       } else {
         const current = await Student.findById(student._id);
-        if (!isTestAccount && (current.class?.toString() !== classDoc._id.toString() || current.teacher?.toString() !== classDoc.teacher.toString())) {
-          return res.status(409).json({ message: 'This student is already joined to another class' });
-        }
         Object.assign(student, current.toObject());
       }
     }
