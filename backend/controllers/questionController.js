@@ -1,19 +1,68 @@
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import Question from '../models/Question.js';
 import QuestionSet from '../models/QuestionSet.js';
 import { generateQuestionsFromText, generateQuestionsFromPrompt } from '../services/aiService.js';
 
 const hashContent = (text) => crypto.createHash('sha256').update(text.trim().toLowerCase()).digest('hex');
 const normalizeTitle = (title) => title.trim().replace(/\s+/g, ' ').toLowerCase();
+const normalizedField = (field) => ({ $toLower: { $trim: { input: { $ifNull: [field, ''] } } } });
+const questionIdentity = {
+  type: '$type',
+  subject: normalizedField('$subject'),
+  chapter: normalizedField('$chapter'),
+  difficulty: '$difficulty',
+  questionText: normalizedField('$questionText'),
+  options: {
+    $map: {
+      input: { $ifNull: ['$options', []] },
+      as: 'option',
+      in: { $toLower: { $trim: { input: { $ifNull: ['$$option', ''] } } } },
+    },
+  },
+  correctAnswer: normalizedField('$correctAnswer'),
+  explanation: normalizedField('$explanation'),
+  imageUrl: '$imageUrl',
+  marks: { $ifNull: ['$marks', 1] },
+};
 
 export const getQuestionSets = async (req, res) => {
   try {
     const [questionSets, ungroupedQuestionCount] = await Promise.all([QuestionSet.aggregate([
       { $match: { teacher: req.user._id } },
-      { $lookup: { from: 'questions', localField: '_id', foreignField: 'questionSet', as: 'questions' } },
-      { $project: { title: 1, createdAt: 1, updatedAt: 1, questionCount: { $size: '$questions' } } },
+      {
+        $lookup: {
+          from: 'questions',
+          let: { setId: '$_id', setTeacher: '$teacher' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$questionSet', '$$setId'] },
+                    { $eq: ['$teacher', '$$setTeacher'] },
+                  ],
+                },
+              },
+            },
+            { $group: { _id: questionIdentity, copies: { $sum: 1 } } },
+            { $group: { _id: null, uniqueCount: { $sum: 1 }, savedCount: { $sum: '$copies' } } },
+          ],
+          as: 'questions',
+        },
+      },
+      {
+        $project: {
+          title: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          questionCount: { $ifNull: [{ $arrayElemAt: ['$questions.uniqueCount', 0] }, 0] },
+          savedQuestionCount: { $ifNull: [{ $arrayElemAt: ['$questions.savedCount', 0] }, 0] },
+        },
+      },
       { $sort: { updatedAt: -1, title: 1 } },
     ]), Question.countDocuments({ teacher: req.user._id, questionSet: { $exists: false } })]);
+    res.set('Cache-Control', 'private, no-store, max-age=0');
     res.json({ questionSets, ungroupedQuestionCount });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch question sets', error: err.message });
@@ -174,17 +223,40 @@ export const getQuestionBank = async (req, res) => {
     if (difficulty) filter.difficulty = difficulty;
     if (type) filter.type = type;
     if (questionSet === 'ungrouped') filter.questionSet = { $exists: false };
-    else if (questionSet) filter.questionSet = questionSet;
+    else if (questionSet) {
+      if (!mongoose.isValidObjectId(questionSet)) {
+        return res.json({ questions: [], total: 0, page: Number(page), totalPages: 0 });
+      }
+      filter.questionSet = new mongoose.Types.ObjectId(questionSet);
+    }
     if (search) filter.questionText = { $regex: search, $options: 'i' };
 
-    const [questions, total] = await Promise.all([
-      Question.find(filter)
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(Number(limit)),
-      Question.countDocuments(filter),
+    const result = await Question.aggregate([
+      { $match: filter },
+      { $sort: { createdAt: -1, _id: 1 } },
+      {
+        $group: {
+          _id: questionIdentity,
+          question: { $first: '$$ROOT' },
+          copies: { $sum: 1 },
+        },
+      },
+      {
+        $replaceRoot: {
+          newRoot: { $mergeObjects: ['$question', { duplicateCopies: { $subtract: ['$copies', 1] } }] },
+        },
+      },
+      { $sort: { createdAt: -1, _id: 1 } },
+      {
+        $facet: {
+          questions: [{ $skip: (Number(page) - 1) * Number(limit) }, { $limit: Number(limit) }],
+          count: [{ $count: 'total' }],
+        },
+      },
     ]);
-
+    const questions = result[0]?.questions || [];
+    const total = result[0]?.count?.[0]?.total || 0;
+    res.set('Cache-Control', 'private, no-store, max-age=0');
     res.json({ questions, total, page: Number(page), totalPages: Math.ceil(total / limit) });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch question bank', error: err.message });
