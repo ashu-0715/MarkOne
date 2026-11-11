@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Sidebar from '../components/Sidebar.jsx';
 import api from '../api/axios.js';
 
@@ -12,6 +12,7 @@ const TeacherReports = () => {
   const [loadingReport, setLoadingReport] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [error, setError] = useState('');
+  const reportSignature = useRef('');
 
   useEffect(() => {
     const loadFilters = async () => {
@@ -42,6 +43,7 @@ const TeacherReports = () => {
 
     let isCurrent = true;
     let requestInFlight = false;
+    let lastUserActivity = Date.now();
     const loadReport = async (quiet = false) => {
       if (requestInFlight) return;
       requestInFlight = true;
@@ -54,7 +56,12 @@ const TeacherReports = () => {
           params: selectedTestId ? { testId: selectedTestId } : {},
         });
         if (!isCurrent) return;
-        setReport(res.data.analysis);
+        const nextReport = res.data.analysis;
+        const signature = JSON.stringify(nextReport);
+        if (signature !== reportSignature.current) {
+          reportSignature.current = signature;
+          setReport(nextReport);
+        }
       } catch (err) {
         if (isCurrent) setError(err.response?.data?.message || 'Could not load report');
       } finally {
@@ -64,18 +71,31 @@ const TeacherReports = () => {
     };
 
     loadReport();
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') loadReport(true);
+    const markUserActivity = () => {
+      lastUserActivity = Date.now();
+    };
+    const refreshWhenVisible = (force = false) => {
+      const userIsScrollingOrInteracting = Date.now() - lastUserActivity < 3000;
+      if (document.visibilityState === 'visible' && (force || !userIsScrollingOrInteracting)) loadReport(true);
     };
     const refreshTimer = window.setInterval(refreshWhenVisible, 15000);
-    window.addEventListener('focus', refreshWhenVisible);
-    document.addEventListener('visibilitychange', refreshWhenVisible);
+    const refreshOnFocus = () => refreshWhenVisible(true);
+    window.addEventListener('focus', refreshOnFocus);
+    document.addEventListener('visibilitychange', refreshOnFocus);
+    window.addEventListener('scroll', markUserActivity, { passive: true });
+    window.addEventListener('wheel', markUserActivity, { passive: true });
+    window.addEventListener('keydown', markUserActivity, { passive: true });
+    window.addEventListener('pointerdown', markUserActivity, { passive: true });
 
     return () => {
       isCurrent = false;
       window.clearInterval(refreshTimer);
-      window.removeEventListener('focus', refreshWhenVisible);
-      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.removeEventListener('focus', refreshOnFocus);
+      document.removeEventListener('visibilitychange', refreshOnFocus);
+      window.removeEventListener('scroll', markUserActivity);
+      window.removeEventListener('wheel', markUserActivity);
+      window.removeEventListener('keydown', markUserActivity);
+      window.removeEventListener('pointerdown', markUserActivity);
     };
   }, [selectedClassId, selectedTestId]);
 
@@ -250,7 +270,7 @@ const TeacherReports = () => {
                 ) : visibleStudentReports.map((studentReport) => {
                   const isExpanded = expandedStudentId === studentReport.student._id;
                   return (
-                    <div key={studentReport.student._id} className="bg-surface rounded-xl border border-white/5 overflow-hidden">
+                    <div key={studentReport.student._id} className="report-student-row bg-surface rounded-xl border border-white/5 overflow-hidden">
                       <button
                         type="button"
                         onClick={() => setExpandedStudentId(isExpanded ? '' : studentReport.student._id)}

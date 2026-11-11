@@ -79,8 +79,10 @@ const QuestionBank = () => {
         }
         return data.questionSets.find((set) => set._id === current._id) || null;
       });
+      return data;
     } catch {
       setError('Failed to load Question Sets');
+      return null;
     }
   };
 
@@ -213,6 +215,7 @@ const QuestionBank = () => {
     try {
       const response = await api.post('/questions/parse-pasted', {
         rawText,
+        questionSet: activeSet?._id || 'ungrouped',
         subject: filters.subject || 'General',
         chapter: filters.chapter || 'General',
         difficulty: 'medium',
@@ -230,15 +233,20 @@ const QuestionBank = () => {
     setUngroupedQuestionCount(importResult.ungroupedQuestionCount);
     setSuccess(`Imported ${importResult.importedCount} question${importResult.importedCount === 1 ? '' : 's'}.`);
     try {
-      await loadSets();
+      const setsData = await loadSets();
+      const targetSetId = activeSet?._id || 'ungrouped';
       const { data: listData } = await api.get('/questions', {
-        params: { questionSet: 'ungrouped', page: 1, limit: QUESTION_PAGE_SIZE },
+        params: { questionSet: targetSetId, page: 1, limit: QUESTION_PAGE_SIZE },
       });
       setQuestions(listData.questions);
       setQuestionTotal(listData.total);
       setPage(1);
       setSelected([]);
-      setActiveSet({ _id: 'ungrouped', title: 'Ungrouped Questions', questionCount: importResult.ungroupedQuestionCount });
+      if (targetSetId === 'ungrouped') {
+        setActiveSet({ _id: 'ungrouped', title: 'Ungrouped Questions', questionCount: importResult.ungroupedQuestionCount });
+      } else {
+        setActiveSet(setsData?.questionSets.find((set) => set._id === targetSetId) || activeSet);
+      }
     } catch (err) {
       setError(`Imported ${importResult.importedCount} questions, but the list did not refresh. Reload the Question Bank to see them.`);
     } finally {
@@ -348,10 +356,10 @@ const QuestionBank = () => {
           <div className="grid grid-cols-2 gap-3 sm:flex">
             {!activeSet ? (
               <button className="btn-accent" onClick={() => { setSetTitle(''); setSetModal({}); }}>+ New Question Set</button>
-            ) : activeSet._id === 'ungrouped' ? null : (
+            ) : (
               <>
-                <button className="btn-ghost" onClick={() => setPasteMode(true)}>Paste Questions</button>
-                <button className="btn-accent" onClick={openAddQuestion}>+ Add Question</button>
+                <button className="btn-ghost" onClick={() => { setError(''); setSuccess(''); setPasteMode(true); }}>Paste Questions</button>
+                {activeSet._id !== 'ungrouped' && <button className="btn-accent" onClick={openAddQuestion}>+ Add Question</button>}
               </>
             )}
           </div>
@@ -428,7 +436,7 @@ const QuestionBank = () => {
 
         <div className="space-y-3">
           {questions.map((q, index) => (
-            <div key={q._id} className="card p-4 flex gap-4 items-start">
+            <div key={q._id} className="question-bank-question-row card p-4 flex gap-4 items-start">
               <input type="checkbox" className="mt-1" checked={selected.includes(q._id)} onChange={() => toggleSelect(q._id)} />
               <button type="button" className="flex-1 text-left" onClick={() => openQuestion(q)}>
                 <div className="flex gap-2 text-xs text-muted mb-1 flex-wrap">
@@ -502,7 +510,9 @@ const QuestionBank = () => {
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
             <div className="card p-6 w-full max-w-lg space-y-3">
               <h3 className="font-semibold text-lg">Paste Questions</h3>
-              <p className="text-muted text-sm">Paste questions (from ChatGPT or elsewhere). Separate each question with a blank line. Imported questions will appear under Ungrouped Questions.</p>
+              <p className="text-muted text-sm">
+                Paste questions (from ChatGPT or elsewhere). Separate each question with a blank line. Imported questions will be saved to {activeSet?.title || 'Ungrouped Questions'}.
+              </p>
               <textarea rows={10} className="input-field" value={rawText} disabled={isImporting} onChange={(e) => setRawText(e.target.value)}
                 placeholder={'1) What is Newton\'s second law?\nA)F=ma\nB)E=mc^2\nAnswer: A)F=ma'} />
               <div className="flex gap-3">

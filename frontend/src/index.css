@@ -184,6 +184,19 @@ svg {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Keep laptop scroll painting light on long report and question lists. */
+@media (min-width: 901px) {
+  .card {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
+  }
+
+  .report-student-row,
+  .question-bank-question-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 5.5rem;
+  }
+}
+
 /* Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
   * {
