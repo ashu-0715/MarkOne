@@ -5,6 +5,7 @@ import TestAttempt from '../models/TestAttempt.js';
 import Student from '../models/Student.js';
 import Class from '../models/Class.js';
 import { ASH_TEST_TEACHER_ID, isLocalDevelopmentRequest } from '../utils/localTestAccounts.js';
+import { getRosterClassName } from '../utils/classRoster.js';
 
 const canIncludeLocalTestAccounts = (req) => process.env.NODE_ENV === 'development'
   && req.user.teacherId === ASH_TEST_TEACHER_ID
@@ -83,10 +84,12 @@ const buildClassAnalysis = async (classId, teacherId, filters = {}, includeTestA
   const classInfo = await Class.findOne({ _id: classId, teacher: teacherId, isActive: true }).select('name subject classCode studentCount');
   if (!classInfo) return null;
 
+  const rosterClassName = getRosterClassName(classInfo);
   const rosterFilter = {
     class: classId,
     teacher: teacherId,
     isActive: true,
+    ...(rosterClassName ? { className: rosterClassName } : {}),
     $or: [
       { isOfficial: true, isTestAccount: false, joinedAt: { $ne: null } },
       ...(includeTestAccounts ? [{ isTestAccount: true }] : []),
@@ -112,7 +115,7 @@ const buildClassAnalysis = async (classId, teacherId, filters = {}, includeTestA
   const testStudentIds = includeTestAccounts ? [] : await Student.find({ isTestAccount: true }).distinct('_id');
   const attempts = await TestAttempt.find({
     test: { $in: testIds },
-    ...(!includeTestAccounts ? { student: { $nin: testStudentIds } } : {}),
+    student: { $in: students.map((student) => student._id), ...(!includeTestAccounts ? { $nin: testStudentIds } : {}) },
     status: { $ne: 'in_progress' },
   })
     .populate('student', 'name rollNumber className section')

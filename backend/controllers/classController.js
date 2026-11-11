@@ -1,6 +1,7 @@
 import ClassModel from '../models/Class.js';
 import Student from '../models/Student.js';
 import { ASH_TEST_TEACHER_ID, classBelongsToAshTeacher, isLocalDevelopmentRequest } from '../utils/localTestAccounts.js';
+import { getRosterClassName } from '../utils/classRoster.js';
 
 const normalizeClassCode = (value) => value?.trim().toUpperCase();
 
@@ -34,9 +35,21 @@ export const createClass = async (req, res) => {
 export const getMyClasses = async (req, res) => {
   try {
     const classes = await ClassModel.find({ teacher: req.user._id, isActive: true }).sort({ createdAt: -1 }).lean();
+    if (!classes.length) return res.json({ classes });
+    const rosterPairs = classes.map((classDoc) => ({
+      class: classDoc._id,
+      ...(getRosterClassName(classDoc) ? { className: getRosterClassName(classDoc) } : {}),
+    }));
     const [counts, localTestStudents] = await Promise.all([
       Student.aggregate([
-        { $match: { teacher: req.user._id, isOfficial: true, isActive: true, isTestAccount: false, joinedAt: { $ne: null } } },
+        { $match: {
+          teacher: req.user._id,
+          isOfficial: true,
+          isActive: true,
+          isTestAccount: false,
+          joinedAt: { $ne: null },
+          $or: rosterPairs,
+        } },
         { $group: { _id: '$class', count: { $sum: 1 } } },
       ]),
       process.env.NODE_ENV === 'development'
@@ -44,10 +57,10 @@ export const getMyClasses = async (req, res) => {
         && isLocalDevelopmentRequest(req)
         ? Student.find({
           teacher: req.user._id,
-          class: { $in: classes.map((classDoc) => classDoc._id) },
+          $or: rosterPairs,
           isTestAccount: true,
           isActive: true,
-        }).select('name registerNumber class').lean()
+        }).select('name registerNumber class className').lean()
         : [],
     ]);
     const countByClass = new Map(counts.map(({ _id, count }) => [_id.toString(), count]));
@@ -143,6 +156,8 @@ export const getClassStudents = async (req, res) => {
       && await classBelongsToAshTeacher(classDoc))) {
       studentFilter.isTestAccount = { $ne: true };
     }
+    const rosterClassName = getRosterClassName(classDoc);
+    if (rosterClassName) studentFilter.className = rosterClassName;
 
     const [students, total] = await Promise.all([
       Student.find(studentFilter)
