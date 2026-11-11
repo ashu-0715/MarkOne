@@ -170,6 +170,11 @@ const TeacherDashboard = () => {
                       <div>
                         <p className="font-medium">{c.name}</p>
                         <p className="text-muted text-xs">{c.subject} | {c.studentCount} students</p>
+                        {c.localTestStudents?.length > 0 && (
+                          <p className="text-accent text-xs mt-1">
+                            Local test: {c.localTestStudents.map((student) => `${student.name} (${student.registerNumber})`).join(', ')}
+                          </p>
+                        )}
                       </div>
                       <span className="font-mono text-accent text-xs">{c.classCode}</span>
                     </div>

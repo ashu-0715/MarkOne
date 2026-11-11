@@ -15,7 +15,11 @@ const StudentJoin = () => {
     const controller = new AbortController();
     api.get('/auth/student/roster', { params: { className: form.className }, signal: controller.signal })
       .then(({ data }) => {
-        setStudents(data.students || []);
+        const roster = data.students || [];
+        setStudents(roster);
+        setForm((current) => current.registerNumber && !roster.some((student) => student.registerNumber === current.registerNumber)
+          ? { ...current, registerNumber: '' }
+          : current);
         setError('');
       })
       .catch((err) => {
