@@ -30,7 +30,7 @@ const StudentDashboard = () => {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
         <div>
           <h1 className="font-display font-bold text-2xl">Hi, {user?.name}</h1>
-          <p className="text-muted text-sm">Roll No. {user?.rollNumber} · {user?.className} {user?.section}</p>
+          <p className="text-muted text-sm">Roll No. {user?.registerNumber || user?.rollNumber} · {user?.className}</p>
         </div>
         <button onClick={logout} className="btn-ghost">Log out</button>
       </div>

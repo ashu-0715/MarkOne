@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/axios.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -6,10 +6,37 @@ import { useAuth } from '../context/AuthContext.jsx';
 const StudentJoin = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [form, setForm] = useState({ name: '', rollNumber: '', className: '', section: '', classCode: '' });
+  const [form, setForm] = useState({ className: '', registerNumber: '', classCode: '' });
+  const [students, setStudents] = useState([]);
   const [error, setError] = useState('');
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  useEffect(() => {
+    if (!form.className) { setStudents([]); setError(''); return; }
+    const controller = new AbortController();
+    api.get('/auth/student/roster', { params: { className: form.className }, signal: controller.signal })
+      .then(({ data }) => {
+        setStudents(data.students || []);
+        setError('');
+      })
+      .catch((err) => {
+        if (err.code === 'ERR_CANCELED') return;
+        setStudents([]);
+        setError('Could not load the official student list');
+      });
+    return () => controller.abort();
+  }, [form.className]);
+
+  const selectedStudent = students.find((student) => student.registerNumber === form.registerNumber);
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    if (name === 'className') {
+      setStudents([]);
+      setError('');
+    }
+    setForm((current) => name === 'className'
+      ? { ...current, className: value, registerNumber: '' }
+      : { ...current, [name]: value });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -31,10 +58,16 @@ const StudentJoin = () => {
         <p className="text-muted text-sm mb-6">No password needed — just your class code.</p>
         {error && <p className="text-danger text-sm mb-4">{error}</p>}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <input required name="name" placeholder="Your Name" className="input-field" onChange={handleChange} />
-          <input required name="rollNumber" placeholder="Roll Number" className="input-field" onChange={handleChange} />
-          <input required name="className" placeholder="Class (e.g. XII)" className="input-field" onChange={handleChange} />
-          <input required name="section" placeholder="Section (e.g. A)" className="input-field" onChange={handleChange} />
+          <select required name="className" value={form.className} className="input-field" onChange={handleChange}>
+            <option value="">Select Class</option>
+            <option value="12A1">12A1</option>
+            <option value="12A2">12A2</option>
+          </select>
+          <select required name="registerNumber" value={form.registerNumber} className="input-field" disabled={!form.className} onChange={handleChange}>
+            <option value="">Select Roll Number</option>
+            {students.map((student) => <option key={student.registerNumber} value={student.registerNumber}>{student.registerNumber}</option>)}
+          </select>
+          <input value={selectedStudent?.name || ''} placeholder="Student Name" className="input-field" readOnly aria-readonly="true" />
           <input required name="classCode" placeholder="Class Code" className="input-field" onChange={handleChange} />
           <button className="btn-accent w-full">Join Class</button>
         </form>
