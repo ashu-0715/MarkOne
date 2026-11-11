@@ -25,7 +25,7 @@ export const protect = (allowedRoles = ['teacher', 'student']) => {
         req.user = teacher;
       } else {
         const student = await Student.findById(decoded.id);
-        if (!student || !student.isActive) {
+        if (!student || !student.isActive || student.isOfficial !== true || student.isTestAccount) {
           return res.status(401).json({ message: 'Account not found or deactivated' });
         }
         req.user = student;

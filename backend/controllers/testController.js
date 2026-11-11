@@ -3,6 +3,7 @@ import Question from '../models/Question.js';
 import TestAttempt from '../models/TestAttempt.js';
 import Class from '../models/Class.js';
 import QuestionSet from '../models/QuestionSet.js';
+import SystemSetting from '../models/SystemSetting.js';
 import PDFDocument from 'pdfkit';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +25,23 @@ const getScheduleError = (test) => {
   if (test.availableFrom && now < test.availableFrom) return 'This test has not started yet';
   if (test.availableUntil && now > test.availableUntil) return 'This test is closed';
   return '';
+};
+
+const getStudentActivationTime = async () => {
+  const setting = await SystemSetting.findOne({ key: 'student-system' }).select('studentSystemActivatedAt').lean();
+  return setting?.studentSystemActivatedAt || null;
+};
+
+const getStudentTestHistoryStart = (student, activatedAt) => {
+  if (!activatedAt) return null;
+  const boundaries = [activatedAt, student.dashboardStartedAt].filter(Boolean).map((value) => new Date(value));
+  return boundaries.length ? new Date(Math.max(...boundaries.map((value) => value.getTime()))) : null;
+};
+
+const isAvailableToOfficialStudent = async (test, student) => {
+  const activatedAt = await getStudentActivationTime();
+  const visibleSince = getStudentTestHistoryStart(student, activatedAt);
+  return Boolean(visibleSince && test.createdAt && test.createdAt >= visibleSince);
 };
 
 const safeFilePart = (value, fallback) => {
@@ -105,6 +123,7 @@ export const getMyAttemptResult = async (req, res) => {
   try {
     const test = await Test.findById(req.params.id).populate('questions');
     if (!test) return res.status(404).json({ message: 'Test not found' });
+    if (!(await isAvailableToOfficialStudent(test, req.user)) || test.class.toString() !== req.user.class?.toString()) return res.status(404).json({ message: 'Test not found' });
 
     const attempt = await TestAttempt.findOne({ test: test._id, student: req.user._id });
     if (!attempt) return res.status(404).json({ message: 'No attempt found for this test' });
@@ -155,6 +174,7 @@ export const downloadMyAttemptReport = async (req, res) => {
   try {
     const test = await Test.findOne({ _id: req.params.id, class: req.user.class }).populate('questions');
     if (!test) return res.status(404).json({ message: 'Test not found' });
+    if (!(await isAvailableToOfficialStudent(test, req.user))) return res.status(404).json({ message: 'Test not found' });
 
     const attempt = await TestAttempt.findOne({
       test: test._id,
@@ -263,12 +283,17 @@ export const downloadMyAttemptReport = async (req, res) => {
 // Student-facing: list published tests for the student's class, plus their attempt status
 export const getAvailableTestsForStudent = async (req, res) => {
   try {
+    if (req.user.isOfficial !== true || req.user.isTestAccount) return res.status(403).json({ message: 'Official student login required' });
     const activeClass = await Class.exists({ _id: req.user.class, isActive: true });
     if (!activeClass) return res.json({ tests: [] });
+    const activatedAt = await getStudentActivationTime();
+    const visibleSince = getStudentTestHistoryStart(req.user, activatedAt);
+    if (!visibleSince) return res.json({ tests: [] });
     const now = new Date();
     const tests = await Test.find({
       class: req.user.class,
       status: 'published',
+      createdAt: { $gte: visibleSince },
       $and: [
         { $or: [{ availableFrom: { $exists: false } }, { availableFrom: null }, { availableFrom: { $lte: now } }] },
         { $or: [{ availableUntil: { $exists: false } }, { availableUntil: null }, { availableUntil: { $gte: now } }] },
@@ -276,11 +301,12 @@ export const getAvailableTestsForStudent = async (req, res) => {
     })
       .select('title subject chapter timeLimitMinutes totalMarks availableFrom availableUntil createdAt')
       .sort({ createdAt: -1 });
+    const eligibleTests = tests;
 
-    const attempts = await TestAttempt.find({ student: req.user._id }).select('test status score percentage');
+    const attempts = await TestAttempt.find({ student: req.user._id, test: { $in: eligibleTests.map((test) => test._id) } }).select('test status score percentage');
     const attemptMap = new Map(attempts.map((a) => [a.test.toString(), a]));
 
-    const withStatus = tests.map((t) => ({
+    const withStatus = eligibleTests.map((t) => ({
       ...t.toObject(),
       attempt: attemptMap.get(t._id.toString()) || null,
     }));
@@ -294,14 +320,17 @@ export const getAvailableTestsForStudent = async (req, res) => {
 // Student-facing: show submitted results from all tests, including tests no longer available.
 export const getMyResultHistory = async (req, res) => {
   try {
+    const activatedAt = await getStudentActivationTime();
+    const visibleSince = getStudentTestHistoryStart(req.user, activatedAt);
+    if (!visibleSince || req.user.isOfficial !== true || req.user.isTestAccount) return res.json({ attempts: [] });
     const attempts = await TestAttempt.find({
       student: req.user._id,
       status: { $ne: 'in_progress' },
     })
-      .populate('test', 'title subject totalMarks')
+      .populate('test', 'title subject totalMarks createdAt class')
       .sort({ submittedAt: -1, createdAt: -1 });
 
-    res.json({ attempts });
+    res.json({ attempts: attempts.filter((attempt) => attempt.submittedAt >= visibleSince && attempt.test?.createdAt >= activatedAt && attempt.test?.class?.toString() === req.user.class?.toString()) });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch result history', error: err.message });
   }
@@ -310,6 +339,7 @@ export const getMyResultHistory = async (req, res) => {
 // Student-facing: fetch a published test for their class, with answers stripped
 export const getTestForStudent = async (req, res) => {
   try {
+    if (req.user.isOfficial !== true || req.user.isTestAccount) return res.status(403).json({ message: 'Official student login required' });
     const activeClass = await Class.exists({ _id: req.user.class, isActive: true });
     if (!activeClass) return res.status(404).json({ message: 'Test not available' });
     const test = await Test.findOne({
@@ -318,6 +348,7 @@ export const getTestForStudent = async (req, res) => {
       status: 'published',
     }).populate('questions');
     if (!test) return res.status(404).json({ message: 'Test not available' });
+    if (!(await isAvailableToOfficialStudent(test, req.user))) return res.status(404).json({ message: 'Test not available' });
     const scheduleError = getScheduleError(test);
     if (scheduleError) return res.status(403).json({ message: scheduleError });
 
@@ -355,11 +386,16 @@ export const getTestForStudent = async (req, res) => {
 // Student submits answers -> server grades against the real Question docs
 export const submitTestAttempt = async (req, res) => {
   try {
+    if (req.user.isOfficial !== true || req.user.isTestAccount) return res.status(403).json({ message: 'Official student login required' });
     const { answers, status } = req.body; // answers: [{ questionId, givenAnswer, timeTakenSeconds }]
     const activeClass = await Class.exists({ _id: req.user.class, isActive: true });
     if (!activeClass) return res.status(404).json({ message: 'Test not found' });
     const test = await Test.findOne({ _id: req.params.id, class: req.user.class, status: 'published' }).populate('questions');
     if (!test) return res.status(404).json({ message: 'Test not found' });
+    if (!(await isAvailableToOfficialStudent(test, req.user))) return res.status(404).json({ message: 'Test not found' });
+    if (!Array.isArray(answers) || answers.some((answer) => !test.questions.some((question) => question._id.toString() === answer.questionId))) {
+      return res.status(400).json({ message: 'Invalid answer list' });
+    }
     const scheduleError = getScheduleError(test);
     if (scheduleError) return res.status(403).json({ message: scheduleError });
 
@@ -401,6 +437,9 @@ const isCorrect = studentAnswer === correctAnswer;
     const attempt = await TestAttempt.findOneAndUpdate(
       { test: test._id, student: req.user._id },
       {
+        studentName: req.user.name,
+        registerNumber: req.user.registerNumber,
+        className: req.user.className,
         answers: gradedAnswers,
         score,
         percentage,

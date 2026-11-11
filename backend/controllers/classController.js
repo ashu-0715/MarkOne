@@ -32,7 +32,13 @@ export const createClass = async (req, res) => {
 
 export const getMyClasses = async (req, res) => {
   try {
-    const classes = await ClassModel.find({ teacher: req.user._id, isActive: true }).sort({ createdAt: -1 });
+    const classes = await ClassModel.find({ teacher: req.user._id, isActive: true }).sort({ createdAt: -1 }).lean();
+    const counts = await Student.aggregate([
+      { $match: { teacher: req.user._id, isOfficial: true, isActive: true, isTestAccount: false, joinedAt: { $ne: null } } },
+      { $group: { _id: '$class', count: { $sum: 1 } } },
+    ]);
+    const countByClass = new Map(counts.map(({ _id, count }) => [_id.toString(), count]));
+    classes.forEach((classDoc) => { classDoc.studentCount = countByClass.get(classDoc._id.toString()) || 0; });
     res.json({ classes });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch classes', error: err.message });

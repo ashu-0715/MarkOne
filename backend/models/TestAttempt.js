@@ -15,6 +15,9 @@ const testAttemptSchema = new mongoose.Schema(
   {
     test: { type: mongoose.Schema.Types.ObjectId, ref: 'Test', required: true, index: true },
     student: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true, index: true },
+    studentName: { type: String },
+    registerNumber: { type: String },
+    className: { type: String },
     answers: [answerSchema],
     score: { type: Number, default: 0 },
     percentage: { type: Number, default: 0 },
