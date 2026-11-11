@@ -55,7 +55,10 @@ const QuestionBank = () => {
 
   const loadSets = async () => {
     try {
-      const { data } = await api.get('/questions/sets');
+      const { data } = await api.get('/questions/sets', {
+        headers: { 'Cache-Control': 'no-cache' },
+        params: { refresh: Date.now() },
+      });
       setQuestionSets(data.questionSets);
       setUngroupedQuestionCount(data.ungroupedQuestionCount || 0);
       setActiveSet((current) => current ? data.questionSets.find((set) => set._id === current._id) || null : null);
@@ -282,7 +285,10 @@ const QuestionBank = () => {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
           <div>
             <h1 className="font-display font-bold text-2xl">Question Bank</h1>
-            {activeSet && <p className="text-muted text-sm mt-1">{activeSet.title} · {activeSet.questionCount} question(s)</p>}
+            {activeSet && <p className="text-muted text-sm mt-1">
+              {activeSet.title} · {activeSet.questionCount} unique question(s)
+              {activeSet.savedQuestionCount > activeSet.questionCount && ` · ${activeSet.savedQuestionCount - activeSet.questionCount} duplicate copies hidden`}
+            </p>}
           </div>
           <div className="grid grid-cols-2 gap-3 sm:flex">
             {!activeSet ? (
@@ -300,16 +306,22 @@ const QuestionBank = () => {
 
         {!activeSet ? (
           <div className="space-y-3">
-            {questionSets.map((set) => (
-              <div key={set._id} className="question-bank-set-card card p-4 flex items-center gap-3">
-                <button type="button" className="question-bank-set-title flex-1 text-left" onClick={() => { setActiveSet(set); setSelected([]); }}>
-                  <p className="font-semibold truncate">{set.title}</p>
-                  <p className="text-muted text-sm mt-1">{set.questionCount} question(s)</p>
-                </button>
-                <button className="question-bank-set-button btn-ghost text-sm" onClick={() => { setSetTitle(set.title); setSetModal({ questionSet: set }); }}>Edit</button>
-                <button className="question-bank-set-button btn-ghost text-danger text-sm" onClick={() => removeQuestionSet(set)}>Delete</button>
-              </div>
-            ))}
+            {questionSets.map((set) => {
+              const duplicateCopies = Math.max(0, set.savedQuestionCount - set.questionCount);
+              return (
+                <div key={set._id} className="question-bank-set-card card p-4 flex items-center gap-3">
+                  <button type="button" className="question-bank-set-title flex-1 text-left" onClick={() => { setActiveSet(set); setSelected([]); }}>
+                    <p className="font-semibold truncate">{set.title}</p>
+                    <p className="text-muted text-sm mt-1">
+                      {set.questionCount} unique question(s) in this set
+                      {duplicateCopies > 0 && ` · ${duplicateCopies} duplicate copies hidden`}
+                    </p>
+                  </button>
+                  <button className="question-bank-set-button btn-ghost text-sm" onClick={() => { setSetTitle(set.title); setSetModal({ questionSet: set }); }}>Edit</button>
+                  <button className="question-bank-set-button btn-ghost text-danger" onClick={() => removeQuestionSet(set)}>Delete</button>
+                </div>
+              );
+            })}
             {ungroupedQuestionCount > 0 && (
               <div className="card p-4 flex items-center gap-3">
                 <button type="button" className="flex-1 text-left" onClick={() => { setActiveSet({ _id: 'ungrouped', title: 'Ungrouped Questions', questionCount: ungroupedQuestionCount }); setSelected([]); }}>
