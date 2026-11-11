@@ -231,31 +231,43 @@ export const getQuestionBank = async (req, res) => {
     }
     if (search) filter.questionText = { $regex: search, $options: 'i' };
 
-    const result = await Question.aggregate([
-      { $match: filter },
-      { $sort: { createdAt: -1, _id: 1 } },
-      {
-        $group: {
-          _id: questionIdentity,
-          question: { $first: '$$ROOT' },
-          copies: { $sum: 1 },
+    let questions;
+    let total;
+    if (questionSet && questionSet !== 'ungrouped') {
+      const result = await Question.aggregate([
+        { $match: filter },
+        { $sort: { createdAt: -1, _id: 1 } },
+        {
+          $group: {
+            _id: questionIdentity,
+            question: { $first: '$$ROOT' },
+            copies: { $sum: 1 },
+          },
         },
-      },
-      {
-        $replaceRoot: {
-          newRoot: { $mergeObjects: ['$question', { duplicateCopies: { $subtract: ['$copies', 1] } }] },
+        {
+          $replaceRoot: {
+            newRoot: { $mergeObjects: ['$question', { duplicateCopies: { $subtract: ['$copies', 1] } }] },
+          },
         },
-      },
-      { $sort: { createdAt: -1, _id: 1 } },
-      {
-        $facet: {
-          questions: [{ $skip: (Number(page) - 1) * Number(limit) }, { $limit: Number(limit) }],
-          count: [{ $count: 'total' }],
+        { $sort: { createdAt: -1, _id: 1 } },
+        {
+          $facet: {
+            questions: [{ $skip: (Number(page) - 1) * Number(limit) }, { $limit: Number(limit) }],
+            count: [{ $count: 'total' }],
+          },
         },
-      },
-    ]);
-    const questions = result[0]?.questions || [];
-    const total = result[0]?.count?.[0]?.total || 0;
+      ]);
+      questions = result[0]?.questions || [];
+      total = result[0]?.count?.[0]?.total || 0;
+    } else {
+      [questions, total] = await Promise.all([
+        Question.find(filter)
+          .sort({ createdAt: -1, _id: -1 })
+          .skip((Number(page) - 1) * Number(limit))
+          .limit(Number(limit)),
+        Question.countDocuments(filter),
+      ]);
+    }
     res.set('Cache-Control', 'private, no-store, max-age=0');
     res.json({ questions, total, page: Number(page), totalPages: Math.ceil(total / limit) });
   } catch (err) {
@@ -268,21 +280,51 @@ export const getQuestionBank = async (req, res) => {
 export const parsePastedQuestions = async (req, res) => {
   try {
     const { rawText } = req.body;
-    const blocks = rawText.split(/\n\s*\n/).filter(Boolean);
+    if (typeof rawText !== 'string' || !rawText.trim()) {
+      return res.status(400).json({ message: 'Paste at least one question before importing.' });
+    }
+    const blocks = [];
+    let currentBlock = [];
+    rawText.split(/\r?\n/).forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (currentBlock.length) blocks.push(currentBlock);
+        currentBlock = [];
+        return;
+      }
+      if (/^\d+[\).]\s+/.test(trimmed) && currentBlock.length) {
+        blocks.push(currentBlock);
+        currentBlock = [];
+      }
+      currentBlock.push(trimmed);
+    });
+    if (currentBlock.length) blocks.push(currentBlock);
 
-    const parsed = blocks.map((block) => {
-      const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
-      const questionText = lines[0]?.replace(/^\d+[\).]?\s*/, '') || '';
-      const options = lines
-        .slice(1)
-        .filter((l) => /^[A-Da-d][\).]/.test(l))
-        .map((l) => l.replace(/^[A-Da-d][\).]\s*/, ''));
-      const answerLine = lines.find((l) => /^answer[:\-]/i.test(l));
-      const correctAnswer = answerLine ? answerLine.replace(/^answer[:\-]\s*/i, '') : '';
+    const parseErrors = [];
+    const parsed = blocks.map((lines, index) => {
+      const firstLine = lines[0].replace(/^\d+[\).]?\s*/, '');
+      const questionLines = [firstLine];
+      const options = [];
+      let correctAnswer = '';
+      let sawOption = false;
+
+      lines.slice(1).forEach((line) => {
+        const optionMatch = line.match(/^([A-Da-d])[\).]\s*(.+)$/);
+        if (optionMatch) {
+          sawOption = true;
+          options.push(optionMatch[2].trim());
+        } else if (/^answer[:\-]/i.test(line)) {
+          correctAnswer = line.replace(/^answer[:\-]\s*/i, '');
+        } else if (!sawOption && !correctAnswer) {
+          questionLines.push(line);
+        } else {
+          parseErrors.push(index + 1);
+        }
+      });
 
       return {
         type: options.length ? 'mcq' : 'fill_blank',
-        questionText,
+        questionText: questionLines.join(' ').trim(),
         options,
         correctAnswer,
         marks: 1,
@@ -290,7 +332,66 @@ export const parsePastedQuestions = async (req, res) => {
       };
     });
 
-    res.json({ questions: parsed });
+    if (parseErrors.length) {
+      const blocksWithErrors = [...new Set(parseErrors)];
+      return res.status(400).json({
+        message: `Check the formatting in question block(s): ${blocksWithErrors.join(', ')}. Nothing was imported.`,
+        invalidBlocks: blocksWithErrors,
+      });
+    }
+
+    const documents = parsed.map((question) => {
+      const correctAnswer = question.correctAnswer
+        .replace(/^[a-d][).]\s*/i, '')
+        .trim()
+        .toLowerCase();
+      return new Question({
+        ...question,
+        correctAnswer,
+        subject: req.body.subject?.trim() || 'General',
+        chapter: req.body.chapter?.trim() || 'General',
+        difficulty: req.body.difficulty || 'medium',
+        teacher: req.user._id,
+        source: 'pasted',
+        contentHash: hashContent(question.questionText),
+      });
+    });
+
+    const invalidBlocks = (await Promise.all(documents.map(async (document, index) => {
+      try {
+        await document.validate();
+        if (document.type === 'mcq' && !document.options.some(
+          (option) => option.trim().toLowerCase() === document.correctAnswer
+        )) {
+          return index + 1;
+        }
+        return null;
+      } catch {
+        return index + 1;
+      }
+    }))).filter(Boolean);
+
+    if (invalidBlocks.length) {
+      return res.status(400).json({
+        message: `Fix the answer or required fields in question block(s): ${invalidBlocks.join(', ')}. Nothing was imported.`,
+        invalidBlocks,
+      });
+    }
+
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await Question.insertMany(documents, { session, ordered: true });
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    const ungroupedQuestionCount = await Question.countDocuments({
+      teacher: req.user._id,
+      questionSet: { $exists: false },
+    });
+    res.status(201).json({ importedCount: documents.length, ungroupedQuestionCount });
   } catch (err) {
     res.status(500).json({ message: 'Failed to parse pasted questions', error: err.message });
   }

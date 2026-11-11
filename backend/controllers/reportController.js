@@ -83,13 +83,17 @@ const buildClassAnalysis = async (classId, teacherId, filters = {}, includeTestA
   const classInfo = await Class.findOne({ _id: classId, teacher: teacherId, isActive: true }).select('name subject classCode studentCount');
   if (!classInfo) return null;
 
+  const rosterFilter = {
+    class: classId,
+    teacher: teacherId,
+    isActive: true,
+    $or: [
+      { isOfficial: true, isTestAccount: false, joinedAt: { $ne: null } },
+      ...(includeTestAccounts ? [{ isTestAccount: true }] : []),
+    ],
+  };
   const [students, allTests] = await Promise.all([
-    Student.find({
-      class: classId,
-      teacher: teacherId,
-      isActive: true,
-      ...(!includeTestAccounts ? { isTestAccount: { $ne: true } } : {}),
-    })
+    Student.find(rosterFilter)
       .select('name rollNumber className section')
       .sort({ rollNumber: 1, name: 1 }),
     Test.find({ class: classId, teacher: teacherId }).select('_id title subject totalMarks totalStudents').sort({ createdAt: -1 }),
@@ -148,14 +152,11 @@ const buildClassAnalysis = async (classId, teacherId, filters = {}, includeTestA
   });
 
   const attemptedStudents = studentsReport.filter((student) => student.attemptedTests > 0);
-  const visibleStudents = testId ? attemptedStudents : studentsReport;
+  const visibleStudents = studentsReport;
   const configuredTotalStudents = tests.reduce(
     (max, test) => Math.max(max, Number(test.totalStudents) || 0),
     0
   );
-  const expectedStudents = includeTestAccounts
-    ? Math.max(configuredTotalStudents, students.length)
-    : configuredTotalStudents || students.length;
   const classAverage = attemptedStudents.length
     ? round(attemptedStudents.reduce((sum, student) => sum + student.averagePercentage, 0) / attemptedStudents.length)
     : 0;
@@ -163,8 +164,9 @@ const buildClassAnalysis = async (classId, teacherId, filters = {}, includeTestA
   return {
     class: classInfo,
     summary: {
-      totalStudents: expectedStudents,
+      totalStudents: students.length,
       joinedStudents: students.length,
+      targetStudents: configuredTotalStudents || students.length,
       displayedStudents: visibleStudents.length,
       totalTests: tests.length,
       availableTests: allTests.length,
