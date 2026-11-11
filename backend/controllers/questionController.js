@@ -279,9 +279,20 @@ export const getQuestionBank = async (req, res) => {
 // into structured, editable question objects. Best-effort heuristic parser.
 export const parsePastedQuestions = async (req, res) => {
   try {
-    const { rawText } = req.body;
+    const { rawText, questionSet: requestedQuestionSet } = req.body;
     if (typeof rawText !== 'string' || !rawText.trim()) {
       return res.status(400).json({ message: 'Paste at least one question before importing.' });
+    }
+
+    let questionSet = null;
+    if (requestedQuestionSet && requestedQuestionSet !== 'ungrouped') {
+      if (!mongoose.isValidObjectId(requestedQuestionSet)) {
+        return res.status(400).json({ message: 'The selected Question Set is invalid. Reopen it and retry.' });
+      }
+      questionSet = await QuestionSet.findOne({ _id: requestedQuestionSet, teacher: req.user._id });
+      if (!questionSet) {
+        return res.status(404).json({ message: 'The selected Question Set was not found for your account. Nothing was imported.' });
+      }
     }
     const blocks = [];
     let currentBlock = [];
@@ -352,6 +363,7 @@ export const parsePastedQuestions = async (req, res) => {
         chapter: req.body.chapter?.trim() || 'General',
         difficulty: req.body.difficulty || 'medium',
         teacher: req.user._id,
+        ...(questionSet ? { questionSet: questionSet._id } : {}),
         source: 'pasted',
         contentHash: hashContent(question.questionText),
       });
@@ -391,7 +403,11 @@ export const parsePastedQuestions = async (req, res) => {
       teacher: req.user._id,
       questionSet: { $exists: false },
     });
-    res.status(201).json({ importedCount: documents.length, ungroupedQuestionCount });
+    res.status(201).json({
+      importedCount: documents.length,
+      questionSetId: questionSet?._id?.toString() || 'ungrouped',
+      ungroupedQuestionCount,
+    });
   } catch (err) {
     res.status(500).json({ message: 'Failed to parse pasted questions', error: err.message });
   }
