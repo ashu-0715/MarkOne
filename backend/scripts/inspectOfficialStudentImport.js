@@ -13,7 +13,7 @@ try {
   await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 10000, autoIndex: false });
   const exists = await mongoose.connection.db.listCollections({ name: Student.collection.collectionName }, { nameOnly: true }).hasNext();
   const [historicalStudentCount, officialStudentCount, setting, indexes, duplicateGroups] = await Promise.all([
-    Student.countDocuments({ isOfficial: { $ne: true } }),
+    Student.countDocuments({ isOfficial: { $ne: true }, isTestAccount: { $ne: true } }),
     Student.countDocuments({ isOfficial: true }),
     SystemSetting.findOne({ key: 'student-system' }).select('studentSystemActivatedAt').lean(),
     exists ? Student.collection.indexes() : [],

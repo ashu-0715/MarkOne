@@ -283,7 +283,7 @@ export const downloadMyAttemptReport = async (req, res) => {
 // Student-facing: list published tests for the student's class, plus their attempt status
 export const getAvailableTestsForStudent = async (req, res) => {
   try {
-    if (req.user.isOfficial !== true || req.user.isTestAccount) return res.status(403).json({ message: 'Official student login required' });
+    if (req.user.isOfficial !== true && req.user.isTestAccount !== true) return res.status(403).json({ message: 'Student login required' });
     const activeClass = await Class.exists({ _id: req.user.class, isActive: true });
     if (!activeClass) return res.json({ tests: [] });
     const activatedAt = await getStudentActivationTime();
@@ -322,7 +322,7 @@ export const getMyResultHistory = async (req, res) => {
   try {
     const activatedAt = await getStudentActivationTime();
     const visibleSince = getStudentTestHistoryStart(req.user, activatedAt);
-    if (!visibleSince || req.user.isOfficial !== true || req.user.isTestAccount) return res.json({ attempts: [] });
+    if (!visibleSince || (req.user.isOfficial !== true && req.user.isTestAccount !== true)) return res.json({ attempts: [] });
     const attempts = await TestAttempt.find({
       student: req.user._id,
       status: { $ne: 'in_progress' },
@@ -339,7 +339,7 @@ export const getMyResultHistory = async (req, res) => {
 // Student-facing: fetch a published test for their class, with answers stripped
 export const getTestForStudent = async (req, res) => {
   try {
-    if (req.user.isOfficial !== true || req.user.isTestAccount) return res.status(403).json({ message: 'Official student login required' });
+    if (req.user.isOfficial !== true && req.user.isTestAccount !== true) return res.status(403).json({ message: 'Student login required' });
     const activeClass = await Class.exists({ _id: req.user.class, isActive: true });
     if (!activeClass) return res.status(404).json({ message: 'Test not available' });
     const test = await Test.findOne({
@@ -386,7 +386,7 @@ export const getTestForStudent = async (req, res) => {
 // Student submits answers -> server grades against the real Question docs
 export const submitTestAttempt = async (req, res) => {
   try {
-    if (req.user.isOfficial !== true || req.user.isTestAccount) return res.status(403).json({ message: 'Official student login required' });
+    if (req.user.isOfficial !== true && req.user.isTestAccount !== true) return res.status(403).json({ message: 'Student login required' });
     const { answers, status } = req.body; // answers: [{ questionId, givenAnswer, timeTakenSeconds }]
     const activeClass = await Class.exists({ _id: req.user.class, isActive: true });
     if (!activeClass) return res.status(404).json({ message: 'Test not found' });

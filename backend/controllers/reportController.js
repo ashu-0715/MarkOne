@@ -4,6 +4,11 @@ import Test from '../models/Test.js';
 import TestAttempt from '../models/TestAttempt.js';
 import Student from '../models/Student.js';
 import Class from '../models/Class.js';
+import { ASH_TEST_TEACHER_ID, isLocalDevelopmentRequest } from '../utils/localTestAccounts.js';
+
+const canIncludeLocalTestAccounts = (req) => process.env.NODE_ENV === 'development'
+  && req.user.teacherId === ASH_TEST_TEACHER_ID
+  && isLocalDevelopmentRequest(req);
 
 const round = (value, digits = 2) => {
   const factor = 10 ** digits;
@@ -73,13 +78,18 @@ const mapAttempt = (attempt) => {
   };
 };
 
-const buildClassAnalysis = async (classId, teacherId, filters = {}) => {
+const buildClassAnalysis = async (classId, teacherId, filters = {}, includeTestAccounts = false) => {
   const { testId } = filters;
   const classInfo = await Class.findOne({ _id: classId, teacher: teacherId, isActive: true }).select('name subject classCode studentCount');
   if (!classInfo) return null;
 
   const [students, allTests] = await Promise.all([
-    Student.find({ class: classId, teacher: teacherId, isActive: true })
+    Student.find({
+      class: classId,
+      teacher: teacherId,
+      isActive: true,
+      ...(!includeTestAccounts ? { isTestAccount: { $ne: true } } : {}),
+    })
       .select('name rollNumber className section')
       .sort({ rollNumber: 1, name: 1 }),
     Test.find({ class: classId, teacher: teacherId }).select('_id title subject totalMarks totalStudents').sort({ createdAt: -1 }),
@@ -90,7 +100,12 @@ const buildClassAnalysis = async (classId, teacherId, filters = {}) => {
     : allTests;
 
   const testIds = tests.map((test) => test._id);
-  const attempts = await TestAttempt.find({ test: { $in: testIds }, status: { $ne: 'in_progress' } })
+  const testStudentIds = includeTestAccounts ? [] : await Student.find({ isTestAccount: true }).distinct('_id');
+  const attempts = await TestAttempt.find({
+    test: { $in: testIds },
+    ...(!includeTestAccounts ? { student: { $nin: testStudentIds } } : {}),
+    status: { $ne: 'in_progress' },
+  })
     .populate('student', 'name rollNumber className section')
     .populate('test', 'title subject totalMarks')
     .populate('answers.question', 'questionText chapter difficulty marks correctAnswer')
@@ -138,7 +153,9 @@ const buildClassAnalysis = async (classId, teacherId, filters = {}) => {
     (max, test) => Math.max(max, Number(test.totalStudents) || 0),
     0
   );
-  const expectedStudents = configuredTotalStudents || students.length;
+  const expectedStudents = includeTestAccounts
+    ? Math.max(configuredTotalStudents, students.length)
+    : configuredTotalStudents || students.length;
   const classAverage = attemptedStudents.length
     ? round(attemptedStudents.reduce((sum, student) => sum + student.averagePercentage, 0) / attemptedStudents.length)
     : 0;
@@ -181,7 +198,7 @@ const buildClassAnalysis = async (classId, teacherId, filters = {}) => {
 export const getClassReport = async (req, res) => {
   try {
     const { classId } = req.params;
-    const analysis = await buildClassAnalysis(classId, req.user._id, { testId: req.query.testId });
+    const analysis = await buildClassAnalysis(classId, req.user._id, { testId: req.query.testId }, canIncludeLocalTestAccounts(req));
     if (!analysis) return res.status(404).json({ message: 'Class not found' });
 
     res.json({ report: analysis.tests, analysis });
@@ -193,7 +210,11 @@ export const getClassReport = async (req, res) => {
 export const getStudentReport = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const student = await Student.findOne({ _id: studentId, teacher: req.user._id });
+    const student = await Student.findOne({
+      _id: studentId,
+      teacher: req.user._id,
+      ...(!canIncludeLocalTestAccounts(req) ? { isTestAccount: { $ne: true } } : {}),
+    });
     if (!student) return res.status(404).json({ message: 'Student not found' });
 
     const attempts = await TestAttempt.find({ student: studentId, status: { $ne: 'in_progress' } })
@@ -212,7 +233,13 @@ export const getQuestionAnalysis = async (req, res) => {
     const test = await Test.findOne({ _id: testId, teacher: req.user._id });
     if (!test) return res.status(404).json({ message: 'Test not found' });
 
-    const attempts = await TestAttempt.find({ test: testId, status: { $ne: 'in_progress' } });
+    const includeTestAccounts = canIncludeLocalTestAccounts(req);
+    const testStudentIds = includeTestAccounts ? [] : await Student.find({ isTestAccount: true }).distinct('_id');
+    const attempts = await TestAttempt.find({
+      test: testId,
+      ...(!includeTestAccounts ? { student: { $nin: testStudentIds } } : {}),
+      status: { $ne: 'in_progress' },
+    });
 
     const tally = new Map();
     for (const attempt of attempts) {
@@ -243,7 +270,7 @@ export const getQuestionAnalysis = async (req, res) => {
 export const exportClassReportExcel = async (req, res) => {
   try {
     const { classId } = req.params;
-    const analysis = await buildClassAnalysis(classId, req.user._id, { testId: req.query.testId });
+    const analysis = await buildClassAnalysis(classId, req.user._id, { testId: req.query.testId }, canIncludeLocalTestAccounts(req));
     if (!analysis) return res.status(404).json({ message: 'Class not found' });
 
     const workbook = new ExcelJS.Workbook();
@@ -297,7 +324,7 @@ export const exportClassReportExcel = async (req, res) => {
 export const exportClassReportPdf = async (req, res) => {
   try {
     const { classId } = req.params;
-    const analysis = await buildClassAnalysis(classId, req.user._id, { testId: req.query.testId });
+    const analysis = await buildClassAnalysis(classId, req.user._id, { testId: req.query.testId }, canIncludeLocalTestAccounts(req));
     if (!analysis) return res.status(404).json({ message: 'Class not found' });
 
     const safeFileName = analysis.class.name.replace(/[^a-z0-9]/gi, '-').toLowerCase();

@@ -1,5 +1,6 @@
 import ClassModel from '../models/Class.js';
 import Student from '../models/Student.js';
+import { ASH_TEST_TEACHER_ID, classBelongsToAshTeacher, isLocalDevelopmentRequest } from '../utils/localTestAccounts.js';
 
 const normalizeClassCode = (value) => value?.trim().toUpperCase();
 
@@ -33,12 +34,33 @@ export const createClass = async (req, res) => {
 export const getMyClasses = async (req, res) => {
   try {
     const classes = await ClassModel.find({ teacher: req.user._id, isActive: true }).sort({ createdAt: -1 }).lean();
-    const counts = await Student.aggregate([
-      { $match: { teacher: req.user._id, isOfficial: true, isActive: true, isTestAccount: false, joinedAt: { $ne: null } } },
-      { $group: { _id: '$class', count: { $sum: 1 } } },
+    const [counts, localTestStudents] = await Promise.all([
+      Student.aggregate([
+        { $match: { teacher: req.user._id, isOfficial: true, isActive: true, isTestAccount: false, joinedAt: { $ne: null } } },
+        { $group: { _id: '$class', count: { $sum: 1 } } },
+      ]),
+      process.env.NODE_ENV === 'development'
+        && req.user.teacherId === ASH_TEST_TEACHER_ID
+        && isLocalDevelopmentRequest(req)
+        ? Student.find({
+          teacher: req.user._id,
+          class: { $in: classes.map((classDoc) => classDoc._id) },
+          isTestAccount: true,
+          isActive: true,
+        }).select('name registerNumber class').lean()
+        : [],
     ]);
     const countByClass = new Map(counts.map(({ _id, count }) => [_id.toString(), count]));
-    classes.forEach((classDoc) => { classDoc.studentCount = countByClass.get(classDoc._id.toString()) || 0; });
+    localTestStudents.forEach((student) => {
+      const classId = student.class.toString();
+      countByClass.set(classId, (countByClass.get(classId) || 0) + 1);
+    });
+    classes.forEach((classDoc) => {
+      classDoc.studentCount = countByClass.get(classDoc._id.toString()) || 0;
+      classDoc.localTestStudents = localTestStudents
+        .filter((student) => student.class.toString() === classDoc._id.toString())
+        .map(({ name, registerNumber }) => ({ name, registerNumber }));
+    });
     res.json({ classes });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch classes', error: err.message });
@@ -114,12 +136,20 @@ export const getClassStudents = async (req, res) => {
     const classDoc = await ClassModel.findOne({ _id: id, teacher: req.user._id, isActive: true });
     if (!classDoc) return res.status(404).json({ message: 'Class not found' });
 
+    const studentFilter = { class: id };
+    if (!(process.env.NODE_ENV === 'development'
+      && req.user.teacherId === ASH_TEST_TEACHER_ID
+      && isLocalDevelopmentRequest(req)
+      && await classBelongsToAshTeacher(classDoc))) {
+      studentFilter.isTestAccount = { $ne: true };
+    }
+
     const [students, total] = await Promise.all([
-      Student.find({ class: id })
+      Student.find(studentFilter)
         .sort({ rollNumber: 1 })
         .skip((page - 1) * limit)
         .limit(limit),
-      Student.countDocuments({ class: id }),
+      Student.countDocuments(studentFilter),
     ]);
 
     res.json({ students, total, page, totalPages: Math.ceil(total / limit) });

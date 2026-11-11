@@ -5,6 +5,7 @@ import ClassModel from '../models/Class.js';
 import SystemSetting from '../models/SystemSetting.js';
 import { generateTeacherId } from '../utils/generateId.js';
 import { generateOtp, sendOtpSms } from '../utils/otp.js';
+import { isLocalDevelopmentRequest } from '../utils/localTestAccounts.js';
 
 const signToken = (id, role) =>
   jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
@@ -136,7 +137,13 @@ export const getOfficialStudentRoster = async (req, res) => {
       .select('name registerNumber')
       .sort({ registerNumber: 1 })
       .lean();
-    res.json({ students });
+
+    const testStudents = isLocalDevelopmentRequest(req)
+      ? await Student.find({ className, isTestAccount: true, isActive: true })
+        .select('name registerNumber')
+        .lean()
+      : [];
+    res.json({ students: [...students, ...testStudents].sort((a, b) => a.registerNumber.localeCompare(b.registerNumber)) });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch student roster', error: err.message });
   }
@@ -149,43 +156,55 @@ export const joinAsStudent = async (req, res) => {
       return res.status(400).json({ message: 'Select a valid class and register number' });
     }
 
-    const student = await Student.findOne({
+    const normalizedCode = typeof classCode === 'string' ? classCode.trim().toUpperCase() : '';
+    const classDoc = await ClassModel.findOne({ classCode: normalizedCode, isActive: true });
+    if (!classDoc) return res.status(404).json({ message: 'Invalid class code' });
+
+    let student = await Student.findOne({
       className,
       registerNumber: registerNumber.trim(),
       isOfficial: true,
       isActive: true,
       isTestAccount: false,
     });
-    if (!student) return res.status(404).json({ message: 'Official student not found or inactive' });
-
-    const normalizedCode = typeof classCode === 'string' ? classCode.trim().toUpperCase() : '';
-    const classDoc = await ClassModel.findOne({ classCode: normalizedCode, isActive: true });
-    if (!classDoc) return res.status(404).json({ message: 'Invalid class code' });
-    const classNameLabel = String(classDoc.name || '').toUpperCase();
-    const classCodeLabel = String(classDoc.classCode || '').trim().toUpperCase();
-    const classNameMatches = new RegExp(`(^|[^A-Z0-9])${className}([^A-Z0-9]|$)`).test(classNameLabel);
-    const classCodeMatches = classCodeLabel.endsWith(className);
-    if (!classNameMatches && !classCodeMatches) {
-      return res.status(403).json({ message: 'Class code does not belong to the selected class' });
+    if (!student) {
+      const testStudent = await Student.findOne({
+        className,
+        registerNumber: registerNumber.trim(),
+        isTestAccount: true,
+        isActive: true,
+      });
+      if (!testStudent) return res.status(404).json({ message: 'Official student not found or inactive' });
+      if (!isLocalDevelopmentRequest(req)) return res.status(403).json({ message: 'Test accounts are available only from local development' });
+      student = testStudent;
     }
 
-    if (student.joinedAt && (student.class?.toString() !== classDoc._id.toString() || student.teacher?.toString() !== classDoc.teacher.toString())) {
+    const isTestAccount = student.isTestAccount === true;
+    const alreadyJoinedToClass = student.joinedAt
+      && student.class?.toString() === classDoc._id.toString()
+      && student.teacher?.toString() === classDoc.teacher.toString();
+    if (student.joinedAt && !alreadyJoinedToClass && !isTestAccount) {
       return res.status(409).json({ message: 'This student is already joined to another class' });
     }
 
-    if (!student.joinedAt) {
+    if (!alreadyJoinedToClass) {
+      const update = { class: classDoc._id, teacher: classDoc.teacher, rollNumber: student.registerNumber };
+      if (!student.joinedAt) update.joinedAt = new Date();
       const joinedStudent = await Student.findOneAndUpdate(
-        { _id: student._id, joinedAt: null },
-        { $set: { class: classDoc._id, teacher: classDoc.teacher, rollNumber: student.registerNumber, joinedAt: new Date() } },
+        isTestAccount ? { _id: student._id } : { _id: student._id, joinedAt: null },
+        { $set: update },
         { new: true }
       );
       if (joinedStudent) {
-        await ClassModel.updateOne({ _id: classDoc._id }, { $inc: { studentCount: 1 } });
+        if (!isTestAccount && !student.joinedAt) {
+          await ClassModel.updateOne({ _id: classDoc._id }, { $inc: { studentCount: 1 } });
+        }
         Object.assign(student, joinedStudent.toObject());
       } else {
-        await student.populate('class');
         const current = await Student.findById(student._id);
-        if (current.class?.toString() !== classDoc._id.toString()) return res.status(409).json({ message: 'This student is already joined to another class' });
+        if (!isTestAccount && (current.class?.toString() !== classDoc._id.toString() || current.teacher?.toString() !== classDoc.teacher.toString())) {
+          return res.status(409).json({ message: 'This student is already joined to another class' });
+        }
         Object.assign(student, current.toObject());
       }
     }

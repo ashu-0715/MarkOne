@@ -68,8 +68,12 @@ try {
   if (classRollIndex && !classRollIndex.key?.isOfficial) {
     await Student.collection.dropIndex(classRollIndex.name);
   }
-  const identityIndex = currentIndexes.find((index) => index.key?.class === 1 && index.key?.rollNumber === 1 && index.key?.isOfficial === 1);
-  if (!identityIndex) await Student.collection.createIndex({ class: 1, rollNumber: 1, isOfficial: 1 }, { unique: true });
+  const identityIndex = currentIndexes.find((index) => index.key?.class === 1 && index.key?.rollNumber === 1 && index.key?.isOfficial === 1 && index.key?.isTestAccount === 1);
+  if (!identityIndex) await Student.collection.createIndex({ class: 1, rollNumber: 1, isOfficial: 1, isTestAccount: 1 }, { unique: true });
+  for (const oldIdentityIndex of currentIndexes.filter((index) => index.key?.class === 1
+    && index.key?.rollNumber === 1 && index.key?.isOfficial === 1 && !index.key?.isTestAccount)) {
+    await Student.collection.dropIndex(oldIdentityIndex.name);
+  }
   const officialIndex = currentIndexes.find((index) => index.key?.className === 1 && index.key?.registerNumber === 1);
   if (!officialIndex) {
     await Student.collection.createIndex(

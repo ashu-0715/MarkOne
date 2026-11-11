@@ -89,7 +89,8 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+const HOST = process.env.NODE_ENV === 'development' ? '127.0.0.1' : null;
 
-app.listen(PORT, () => {
-  console.log(`🚀 MarkOne Backend running on http://localhost:${PORT}`);
-});
+const onServerStart = () => console.log(`🚀 MarkOne Backend running on http://${HOST || '0.0.0.0'}:${PORT}`);
+if (HOST) app.listen(PORT, HOST, onServerStart);
+else app.listen(PORT, onServerStart);

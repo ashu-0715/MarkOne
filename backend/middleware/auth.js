@@ -1,6 +1,8 @@
 import jwt from 'jsonwebtoken';
 import Teacher from '../models/Teacher.js';
 import Student from '../models/Student.js';
+import Class from '../models/Class.js';
+import { isLocalDevelopmentRequest } from '../utils/localTestAccounts.js';
 
 // Verifies JWT and attaches the authenticated principal to req.user
 export const protect = (allowedRoles = ['teacher', 'student']) => {
@@ -25,7 +27,17 @@ export const protect = (allowedRoles = ['teacher', 'student']) => {
         req.user = teacher;
       } else {
         const student = await Student.findById(decoded.id);
-        if (!student || !student.isActive || student.isOfficial !== true || student.isTestAccount) {
+        if (!student || !student.isActive) {
+          return res.status(401).json({ message: 'Account not found or deactivated' });
+        }
+        if (student.isTestAccount === true) {
+          const studentClass = student.class
+            ? await Class.findOne({ _id: student.class, teacher: student.teacher, isActive: true })
+            : null;
+          if (!isLocalDevelopmentRequest(req) || !studentClass) {
+            return res.status(401).json({ message: 'Test account is not available in this environment or class' });
+          }
+        } else if (student.isOfficial !== true) {
           return res.status(401).json({ message: 'Account not found or deactivated' });
         }
         req.user = student;
