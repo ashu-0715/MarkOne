@@ -90,7 +90,6 @@ const TeacherReports = () => {
           ...studentReport,
           attempts: studentReport.attempts.filter((attempt) => getId(attempt.testId) === selectedTestId),
         }))
-        .filter((studentReport) => studentReport.attempts.length > 0)
       : report.students;
 
     return [...students].sort((a, b) =>
@@ -102,16 +101,17 @@ const TeacherReports = () => {
     (sum, studentReport) => sum + studentReport.attempts.length,
     0
   );
+  const attemptedStudentReports = visibleStudentReports.filter((studentReport) => studentReport.attempts.length > 0);
 
-  const visibleAverage = visibleStudentReports.length
+  const visibleAverage = attemptedStudentReports.length
     ? Math.round(
-        (visibleStudentReports.reduce((sum, studentReport) => {
+        (attemptedStudentReports.reduce((sum, studentReport) => {
           const studentAverage = studentReport.attempts.reduce(
             (attemptSum, attempt) => attemptSum + (attempt.percentage || 0),
             0
           ) / studentReport.attempts.length;
           return sum + studentAverage;
-        }, 0) / visibleStudentReports.length) * 100
+        }, 0) / attemptedStudentReports.length) * 100
       ) / 100
     : 0;
 
@@ -120,11 +120,11 @@ const TeacherReports = () => {
     { label: 'Attempts', value: selectedTestId ? visibleAttemptCount : report.summary.totalAttempts },
     {
       label: 'Attempted Students',
-      value: `${selectedTestId ? visibleStudentReports.length : report.summary.attemptedStudents}/${selectedTestId ? (selectedTest?.totalStudents || report.summary.totalStudents) : report.summary.totalStudents}`,
+      value: `${selectedTestId ? attemptedStudentReports.length : report.summary.attemptedStudents}/${report.summary.joinedStudents ?? report.summary.totalStudents}`,
     },
     {
-      label: selectedTestId ? 'Shown Students' : 'Joined Students',
-      value: selectedTestId ? visibleStudentReports.length : (report.summary.joinedStudents ?? visibleStudentReports.length),
+      label: 'Joined Students',
+      value: report.summary.joinedStudents ?? visibleStudentReports.length,
     },
   ] : [];
 
@@ -222,9 +222,7 @@ const TeacherReports = () => {
 
               <div className="space-y-3">
                 {visibleStudentReports.length === 0 ? (
-                  <p className="text-muted text-sm">
-                    {selectedTestId ? 'No students have attended this test yet.' : 'No students have joined this class yet.'}
-                  </p>
+                  <p className="text-muted text-sm">No students have joined this class yet.</p>
                 ) : visibleStudentReports.map((studentReport) => {
                   const isExpanded = expandedStudentId === studentReport.student._id;
                   return (
@@ -240,6 +238,9 @@ const TeacherReports = () => {
                         </div>
                         <div className="flex flex-wrap gap-2 text-xs">
                           <span className="rounded-full bg-card px-3 py-1 text-accent">{getMarksSummary(studentReport)}</span>
+                          {selectedTestId && <span className="rounded-full bg-card px-3 py-1 text-white/80">
+                            {studentReport.attempts.length ? 'Attended' : 'Not attempted'}
+                          </span>}
                           <span className="rounded-full bg-card px-3 py-1 text-white/80">{isExpanded ? 'Hide analysis' : 'View analysis'}</span>
                         </div>
                       </button>
@@ -258,7 +259,9 @@ const TeacherReports = () => {
                           </div>
 
                           {studentReport.attempts.length === 0 ? (
-                            <p className="text-muted text-sm">No submitted tests yet.</p>
+                            <p className="text-muted text-sm">
+                              {selectedTestId ? 'No attempt submitted for this test yet.' : 'No submitted tests yet.'}
+                            </p>
                           ) : studentReport.attempts.map((attempt) => (
                             <div key={attempt.attemptId} className="rounded-lg bg-card p-4">
                               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-3">

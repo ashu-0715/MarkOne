@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Sidebar from '../components/Sidebar.jsx';
 import api from '../api/axios.js';
 
@@ -14,6 +14,7 @@ const emptyQuestion = {
   explanation: '',
   marks: 1,
 };
+const QUESTION_PAGE_SIZE = 25;
 
 const prepareQuestionForm = (question) => ({
   ...emptyQuestion,
@@ -23,6 +24,8 @@ const prepareQuestionForm = (question) => ({
 
 const QuestionBank = () => {
   const [questions, setQuestions] = useState([]);
+  const [questionTotal, setQuestionTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [questionSets, setQuestionSets] = useState([]);
   const [ungroupedQuestionCount, setUngroupedQuestionCount] = useState(0);
   const [activeSet, setActiveSet] = useState(null);
@@ -37,19 +40,27 @@ const QuestionBank = () => {
   const [setModal, setSetModal] = useState(null);
   const [setTitle, setSetTitle] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const importLock = useRef(false);
+  const loadRequestId = useRef(0);
 
   const allQuestionIds = useMemo(() => questions.map((question) => question._id), [questions]);
   const allSelected = allQuestionIds.length > 0 && allQuestionIds.every((id) => selected.includes(id));
 
   const load = async () => {
+    const requestId = ++loadRequestId.current;
     try {
       const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
       if (activeSet?._id) params.questionSet = activeSet._id;
+      params.page = page;
+      params.limit = QUESTION_PAGE_SIZE;
       const { data } = await api.get('/questions', { params });
+      if (requestId !== loadRequestId.current) return;
       setQuestions(data.questions);
-      setSelected((current) => current.filter((id) => data.questions.some((question) => question._id === id)));
+      setQuestionTotal(data.total);
     } catch (err) {
-      setError('Failed to load question bank');
+      if (requestId === loadRequestId.current) setError('Failed to load question bank');
     }
   };
 
@@ -61,13 +72,19 @@ const QuestionBank = () => {
       });
       setQuestionSets(data.questionSets);
       setUngroupedQuestionCount(data.ungroupedQuestionCount || 0);
-      setActiveSet((current) => current ? data.questionSets.find((set) => set._id === current._id) || null : null);
+      setActiveSet((current) => {
+        if (!current) return null;
+        if (current._id === 'ungrouped') {
+          return { ...current, questionCount: data.ungroupedQuestionCount || 0 };
+        }
+        return data.questionSets.find((set) => set._id === current._id) || null;
+      });
     } catch {
       setError('Failed to load Question Sets');
     }
   };
 
-  useEffect(() => { load(); }, [filters, activeSet?._id]);
+  useEffect(() => { load(); }, [filters, activeSet?._id, page]);
   useEffect(() => { loadSets(); }, []);
 
   const toggleSelect = (id) =>
@@ -75,6 +92,12 @@ const QuestionBank = () => {
 
   const toggleSelectAll = () => {
     setSelected(allSelected ? [] : allQuestionIds);
+  };
+
+  const updateFilter = (key, value) => {
+    setPage(1);
+    setSelected([]);
+    setFilters((current) => ({ ...current, [key]: value }));
   };
 
   const openQuestion = (question) => {
@@ -132,9 +155,13 @@ const QuestionBank = () => {
 
   const handleBulkDelete = async () => {
     if (!selected.length) return;
-    await api.delete('/questions', { data: { ids: selected } });
-    setSelected([]);
-    load();
+    try {
+      await api.delete('/questions', { data: { ids: selected } });
+      setSelected([]);
+      await Promise.all([load(), loadSets()]);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to delete selected questions');
+    }
   };
 
   const validateQuestion = () => {
@@ -177,17 +204,46 @@ const QuestionBank = () => {
   };
 
   const handleParsePasted = async () => {
+    if (importLock.current || !rawText.trim()) return;
+    importLock.current = true;
+    setIsImporting(true);
+    setError('');
+    setSuccess('');
+    let importResult;
     try {
-      const { data } = await api.post('/questions/parse-pasted', { rawText });
-      for (const q of data.questions) {
-        await api.post('/questions', { ...q, allowSimilarQuestions: true, questionSet: activeSet?._id, subject: filters.subject || 'General', chapter: filters.chapter || 'General', difficulty: 'medium' });
-      }
-      setPasteMode(false);
-      setRawText('');
-      load();
-      loadSets();
+      const response = await api.post('/questions/parse-pasted', {
+        rawText,
+        subject: filters.subject || 'General',
+        chapter: filters.chapter || 'General',
+        difficulty: 'medium',
+      });
+      importResult = response.data;
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to parse pasted questions');
+      setError(err.response?.data?.message || 'Failed to import pasted questions. Your pasted text is still available to retry.');
+      importLock.current = false;
+      setIsImporting(false);
+      return;
+    }
+
+    setPasteMode(false);
+    setRawText('');
+    setUngroupedQuestionCount(importResult.ungroupedQuestionCount);
+    setSuccess(`Imported ${importResult.importedCount} question${importResult.importedCount === 1 ? '' : 's'}.`);
+    try {
+      await loadSets();
+      const { data: listData } = await api.get('/questions', {
+        params: { questionSet: 'ungrouped', page: 1, limit: QUESTION_PAGE_SIZE },
+      });
+      setQuestions(listData.questions);
+      setQuestionTotal(listData.total);
+      setPage(1);
+      setSelected([]);
+      setActiveSet({ _id: 'ungrouped', title: 'Ungrouped Questions', questionCount: importResult.ungroupedQuestionCount });
+    } catch (err) {
+      setError(`Imported ${importResult.importedCount} questions, but the list did not refresh. Reload the Question Bank to see them.`);
+    } finally {
+      importLock.current = false;
+      setIsImporting(false);
     }
   };
 
@@ -286,8 +342,7 @@ const QuestionBank = () => {
           <div>
             <h1 className="font-display font-bold text-2xl">Question Bank</h1>
             {activeSet && <p className="text-muted text-sm mt-1">
-              {activeSet.title} · {activeSet.questionCount} unique question(s)
-              {activeSet.savedQuestionCount > activeSet.questionCount && ` · ${activeSet.savedQuestionCount - activeSet.questionCount} duplicate copies hidden`}
+              {activeSet.title} · {activeSet.questionCount} {activeSet.questionCount === 1 ? 'question' : 'questions'}
             </p>}
           </div>
           <div className="grid grid-cols-2 gap-3 sm:flex">
@@ -303,28 +358,27 @@ const QuestionBank = () => {
         </div>
 
         {error && <p className="text-danger text-sm mb-4">{error}</p>}
+        {success && <p className="text-success text-sm mb-4" role="status">{success}</p>}
 
         {!activeSet ? (
           <div className="space-y-3">
             {questionSets.map((set) => {
-              const duplicateCopies = Math.max(0, set.savedQuestionCount - set.questionCount);
               return (
                 <div key={set._id} className="question-bank-set-card card p-4 flex items-center gap-3">
-                  <button type="button" className="question-bank-set-title flex-1 text-left" onClick={() => { setActiveSet(set); setSelected([]); }}>
+                  <button type="button" className="question-bank-set-title flex-1 text-left" onClick={() => { setPage(1); setActiveSet(set); setSelected([]); }}>
                     <p className="font-semibold truncate">{set.title}</p>
                     <p className="text-muted text-sm mt-1">
-                      {set.questionCount} unique question(s) in this set
-                      {duplicateCopies > 0 && ` · ${duplicateCopies} duplicate copies hidden`}
+                      {set.questionCount} {set.questionCount === 1 ? 'question' : 'questions'}
                     </p>
                   </button>
                   <button className="question-bank-set-button btn-ghost text-sm" onClick={() => { setSetTitle(set.title); setSetModal({ questionSet: set }); }}>Edit</button>
-                  <button className="question-bank-set-button btn-ghost text-danger" onClick={() => removeQuestionSet(set)}>Delete</button>
+                <button className="question-bank-set-button btn-ghost text-danger text-sm" onClick={() => removeQuestionSet(set)}>Delete</button>
                 </div>
               );
             })}
             {ungroupedQuestionCount > 0 && (
               <div className="card p-4 flex items-center gap-3">
-                <button type="button" className="flex-1 text-left" onClick={() => { setActiveSet({ _id: 'ungrouped', title: 'Ungrouped Questions', questionCount: ungroupedQuestionCount }); setSelected([]); }}>
+                <button type="button" className="flex-1 text-left" onClick={() => { setPage(1); setActiveSet({ _id: 'ungrouped', title: 'Ungrouped Questions', questionCount: ungroupedQuestionCount }); setSelected([]); }}>
                   <p className="font-semibold">Ungrouped Questions</p>
                   <p className="text-muted text-sm mt-1">{ungroupedQuestionCount} question(s) created before Question Sets</p>
                 </button>
@@ -339,11 +393,11 @@ const QuestionBank = () => {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <input placeholder="Subject" className="input-field" value={filters.subject}
-            onChange={(e) => setFilters({ ...filters, subject: e.target.value })} />
+            onChange={(e) => updateFilter('subject', e.target.value)} />
           <input placeholder="Chapter" className="input-field" value={filters.chapter}
-            onChange={(e) => setFilters({ ...filters, chapter: e.target.value })} />
+            onChange={(e) => updateFilter('chapter', e.target.value)} />
           <select className="input-field" value={filters.type}
-            onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
+            onChange={(e) => updateFilter('type', e.target.value)}>
             <option value="">Any Type</option>
             <option value="mcq">MCQ</option>
             <option value="true_false">True/False</option>
@@ -351,7 +405,7 @@ const QuestionBank = () => {
             <option value="assertion_reason">Assertion & Reason</option>
           </select>
           <input placeholder="Search..." className="input-field" value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })} />
+            onChange={(e) => updateFilter('search', e.target.value)} />
         </div>
 
         <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
@@ -389,6 +443,17 @@ const QuestionBank = () => {
           ))}
           {questions.length === 0 && <p className="text-muted text-sm">No questions match these filters yet.</p>}
         </div>
+        {questionTotal > 0 && (
+          <div className="flex items-center justify-between gap-3 mt-5" aria-label="Question pages">
+            <p className="text-muted text-sm">
+              Showing {(page - 1) * QUESTION_PAGE_SIZE + 1}–{Math.min(page * QUESTION_PAGE_SIZE, questionTotal)} of {questionTotal} questions
+            </p>
+            <div className="flex gap-2">
+              <button className="btn-ghost text-sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button>
+              <button className="btn-ghost text-sm" disabled={page * QUESTION_PAGE_SIZE >= questionTotal} onClick={() => setPage((current) => current + 1)}>Next</button>
+            </div>
+          </div>
+        )}
         </>}
 
         {showAdd && (
@@ -437,13 +502,14 @@ const QuestionBank = () => {
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
             <div className="card p-6 w-full max-w-lg space-y-3">
               <h3 className="font-semibold text-lg">Paste Questions</h3>
-              <p className="text-sm"><span className="text-muted">Test Title:</span> {activeSet?.title}</p>
-              <p className="text-muted text-sm">Paste questions (from ChatGPT or elsewhere). Separate each question with a blank line.</p>
-              <textarea rows={10} className="input-field" value={rawText} onChange={(e) => setRawText(e.target.value)}
+              <p className="text-muted text-sm">Paste questions (from ChatGPT or elsewhere). Separate each question with a blank line. Imported questions will appear under Ungrouped Questions.</p>
+              <textarea rows={10} className="input-field" value={rawText} disabled={isImporting} onChange={(e) => setRawText(e.target.value)}
                 placeholder={'1) What is Newton\'s second law?\nA)F=ma\nB)E=mc^2\nAnswer: A)F=ma'} />
               <div className="flex gap-3">
-                <button className="btn-ghost flex-1" onClick={() => setPasteMode(false)}>Cancel</button>
-                <button className="btn-accent flex-1" onClick={handleParsePasted}>Import</button>
+                <button className="btn-ghost flex-1" disabled={isImporting} onClick={() => setPasteMode(false)}>Cancel</button>
+                <button className="btn-accent flex-1" disabled={isImporting || !rawText.trim()} onClick={handleParsePasted}>
+                  {isImporting ? 'Importing…' : 'Import'}
+                </button>
               </div>
             </div>
           </div>
