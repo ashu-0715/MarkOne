@@ -62,7 +62,7 @@ const LandingPage = () => {
           transition={{ duration: 0.6, delay: 0.15 }}
           className="text-muted mt-6 text-lg max-w-2xl mx-auto"
         >
-          - Experience Speaks😭<br></br>
+          - experience speaks😞<br></br>
           login👇🏻
         </motion.p>
         <motion.div
